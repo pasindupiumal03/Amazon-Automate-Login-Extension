@@ -8,15 +8,17 @@ const LOGIN_URL = "https://auth.hiring.amazon.com/#/login";
 function Popup() {
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
+  const [gasUrl, setGasUrl] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState({ type: "info", message: "Ready to start" });
   const [isFirstTime, setIsFirstTime] = useState(true);
 
   useEffect(() => {
     // Load saved credentials and status on mount
-    getFromStorage(["gmailEmail", "personalPin", "isAutomationRunning"]).then((res) => {
+    getFromStorage(["gmailEmail", "personalPin", "gasScriptUrl", "isAutomationRunning"]).then((res) => {
       if (res.gmailEmail) setEmail(res.gmailEmail);
       if (res.personalPin) setPin(res.personalPin);
+      if (res.gasScriptUrl) setGasUrl(res.gasScriptUrl);
       if (res.isAutomationRunning) setIsRunning(res.isAutomationRunning);
       if (res.gmailEmail && res.personalPin) setIsFirstTime(false);
     });
@@ -45,12 +47,18 @@ function Popup() {
     await saveToStorage({ 
         gmailEmail: email, 
         personalPin: pin, 
+        gasScriptUrl: gasUrl,
         isAutomationRunning: true 
     });
     
     // Notify the current tab to start automation immediately
     try {
-        await chrome.tabs.sendMessage(tab.id, { action: "START_AUTOMATION" });
+        await chrome.tabs.sendMessage(tab.id, { 
+            action: "START_AUTOMATION",
+            gmailEmail: email,
+            personalPin: pin,
+            gasUrl: gasUrl
+        });
     } catch (e) {
         console.log("Could not send START_AUTOMATION message. Content script might not be loaded yet.");
     }
@@ -102,6 +110,21 @@ function Popup() {
               disabled={isRunning}
               placeholder="••••••"
               className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[15px] text-gray-800 placeholder-gray-400 font-bold tracking-widest"
+            />
+            <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Gmail Fetcher URL (GAS)</label>
+          <div className="relative group">
+            <input
+              type="text"
+              value={gasUrl}
+              onChange={(e) => setGasUrl(e.target.value)}
+              disabled={isRunning}
+              placeholder="https://script.google.com/macros/s/..."
+              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[12px] text-gray-800 placeholder-gray-400"
             />
             <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
           </div>

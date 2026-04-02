@@ -11,9 +11,8 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://auth.hiring.amazon.com/*", "https://*.amazon.ca/*", "https://*.amazon.com/*"],
-      "js": ["content.js"],
-      "all_frames": true
+      "matches": ["https://auth.hiring.amazon.com/*"],
+      "js": ["content.js"]
     }
   ],
   "icons": {
