@@ -2,6 +2,41 @@ import { humanType, humanClick } from "./utils/humanEmulation.js";
 
 const LOGIN_URL = "https://auth.hiring.amazon.com/#/login";
 let isProcessing = false; // Guard to prevent multiple simultaneous loops
+let lockdownActive = false; // Emergency stop if captcha is detected
+
+/**
+ * Deep search for any kind of Captcha (including inside Shadow DOM)
+ */
+function isCaptchaVisible() {
+    const indicators = [
+        'iframe[src*="recaptcha"]', 'iframe[src*="arkose"]', 
+        'iframe[src*="funcaptcha"]', 'iframe[src*="captcha"]',
+        '.g-recaptcha', '#captcha-container', '.captcha-modal',
+        '[id*="captcha"]', '[class*="captcha"]', '[id*="recaptcha"]'
+    ];
+    
+    for (const selector of indicators) {
+        const el = document.querySelector(selector);
+        if (el && el.offsetParent !== null) return true;
+    }
+
+    const allElements = document.querySelectorAll('*');
+    for (const el of allElements) {
+        if (el.shadowRoot) {
+            for (const selector of indicators) {
+                const inner = el.shadowRoot.querySelector(selector);
+                if (inner && inner.offsetParent !== null) return true;
+            }
+        }
+    }
+
+    const txt = document.body.innerText.toLowerCase();
+    if (txt.includes("verify you are human") || txt.includes("solve the captcha")) {
+        return true;
+    }
+
+    return false;
+}
 
 /**
  * Fetches the latest OTP from the Google Apps Script bridge.
@@ -9,25 +44,25 @@ let isProcessing = false; // Guard to prevent multiple simultaneous loops
 async function fetchOTP(gasUrl) {
     if (!gasUrl) return null;
     try {
-        console.log("[Auto-Login] Fetching OTP from GAS...");
-        const response = await fetch(gasUrl);
+        const response = await fetch(`${gasUrl}${gasUrl.includes('?') ? '&' : '?'}t=${Date.now()}`);
         const data = await response.json();
-        if (data.otp) {
-            console.log("[Auto-Login] OTP Received:", data.otp);
-            return data.otp;
-        } else {
-            console.log("[Auto-Login] OTP not available yet:", data.error || "Unknown error");
-            return null;
-        }
+        return data.otp || null;
     } catch (err) {
-        console.error("[Auto-Login] Failed to fetch OTP:", err);
         return null;
     }
 }
 
 // Automation logic
 async function runAutoLogin() {
-  if (isProcessing) return;
+  if (lockdownActive || isProcessing) return;
+
+  if (isCaptchaVisible()) {
+      console.warn("[Auto-Login] CAPTCHA DETECTED - Entering Lockdown Mode.");
+      lockdownActive = true;
+      setTimeout(() => { lockdownActive = false; }, 15000);
+      return;
+  }
+
   isProcessing = true;
 
     try {
@@ -38,134 +73,106 @@ async function runAutoLogin() {
         return;
     }
 
-  // Check current URL (including fragment)
-  if (!window.location.href.includes("#/login")) {
-      isProcessing = false;
-      return;
-  }
+    // --- RE-LOGIN DETECTION ---
+    // If we are not on the login hash, but we see a Sign In button, click it to start the flow
+    if (!window.location.href.includes("#/login")) {
+        const signInBtn = Array.from(document.querySelectorAll('button, a')).find(el => {
+            const txt = el.textContent.toLowerCase();
+            return txt === "sign in" || txt === "log in";
+        });
+        
+        if (signInBtn) {
+            console.log("[Auto-Login] Detected session logout. Clicking Sign In to restart flow...");
+            await humanClick(signInBtn);
+            isProcessing = false;
+            return;
+        }
+        
+        // If we're not on the login page and no sign-in button, just exit
+        isProcessing = false;
+        return;
+    }
 
-  console.log("[Auto-Login] Checking for login fields...");
-  
-  // 1. Handle Email Phase
-  const emailInput = document.getElementById("login");
-  if (emailInput && !emailInput.value && settings.gmailEmail) {
-    console.log("[Auto-Login] Email field found. Starting typing...");
-    await humanType(emailInput, settings.gmailEmail);
+    const emailField = document.getElementById("login");
+    const pinField = document.getElementById("pin");
+    const otpField = document.getElementById("input-test-id-confirmOtp");
+    const sendCodeBtnTrigger = document.querySelector('[data-test-id="button-submit"]');
     const continueBtn = document.querySelector('[data-test-id="button-continue"]');
-    if (continueBtn) await humanClick(continueBtn);
-    isProcessing = false;
-    return;
-  }
 
-  // 2. Handle PIN Phase
-  const pinInput = document.getElementById("pin");
-  if (pinInput && !pinInput.value && settings.personalPin) {
-      console.log("[Auto-Login] PIN field found. Starting typing...");
-      await humanType(pinInput, settings.personalPin);
-      const continueBtn = document.querySelector('[data-test-id="button-continue"]');
-      if (continueBtn) await humanClick(continueBtn);
-      isProcessing = false;
-      return;
-  }
+    // Email Step
+    if (emailField && !emailField.value && settings.gmailEmail) {
+        await humanType(emailField, settings.gmailEmail);
+        if (continueBtn) await humanClick(continueBtn);
+        isProcessing = false;
+        return;
+    }
 
-  // 3. Handle 'Send verification code' Phase
-  const sendCodeBtn = document.querySelector('[data-test-id="button-submit"]');
-  const isSendCodeScreen = sendCodeBtn && sendCodeBtn.textContent.includes("Send verification code");
-  
-  if (isSendCodeScreen) {
-      console.log("[Auto-Login] 'Send verification code' button found. Clicking...");
-      await humanClick(sendCodeBtn);
-      isProcessing = false;
-      return;
-  }
+    // PIN Step
+    if (pinField && !pinField.value && settings.personalPin) {
+        await humanType(pinField, settings.personalPin);
+        if (continueBtn) await humanClick(continueBtn);
+        isProcessing = false;
+        return;
+    }
 
-  // 4. Handle OTP Phase
-  const otpInput = document.getElementById("input-test-id-confirmOtp");
-  if (otpInput && !otpInput.value && settings.gasScriptUrl) {
-      console.log("[Auto-Login] OTP screen detected. Polling for code...");
-      
-      // Attempt to fetch OTP multiple times with a delay
-      let otp = null;
-      for (let i = 0; i < 15; i++) { // Try for ~45 seconds
-          otp = await fetchOTP(settings.gasScriptUrl);
-          if (otp) break;
-          await new Promise(r => setTimeout(r, 3000));
-      }
+    // OTP Send Step
+    if (sendCodeBtnTrigger && sendCodeBtnTrigger.textContent.includes("Send verification code")) {
+        await humanClick(sendCodeBtnTrigger);
+        isProcessing = false;
+        return;
+    }
 
-      if (otp) {
-          await humanType(otpInput, otp);
-          const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]');
-          if (verifyBtn) {
-              await humanClick(verifyBtn);
-              console.log("[Auto-Login] OTP verified successfully.");
-          }
-      } else {
-          console.log("[Auto-Login] Could not retrieve OTP after multiple attempts.");
-      }
-      isProcessing = false;
-      return;
-  }
+    // OTP Fetch/Verify Step
+    if (otpField && settings.gasScriptUrl) {
+        if (!otpField.value) {
+            let otp = null;
+            for (let i = 0; i < 20; i++) {
+                if (isCaptchaVisible()) { lockdownActive = true; isProcessing = false; return; }
+                otp = await fetchOTP(settings.gasScriptUrl);
+                if (otp) break;
+                await new Promise(r => setTimeout(r, 3000));
+            }
+            if (otp) {
+                await humanType(otpField, otp);
+                const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]') || 
+                                 document.querySelector('[data-test-id="button-continue"]');
+                if (verifyBtn) await humanClick(verifyBtn);
+            }
+        } else {
+            const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]') || 
+                                 document.querySelector('[data-test-id="button-continue"]');
+            if (verifyBtn) await humanClick(verifyBtn);
+        }
+    }
 
-  // 5. Handle Final Continue Phase
-  const finalContinueBtn = document.querySelector('[data-test-id="button-continue"]');
-  if (finalContinueBtn && !emailInput && !pinInput && !otpInput && !sendCodeBtn) {
-      console.log("[Auto-Login] Final 'Continue' button found. Clicking...");
-      await humanClick(finalContinueBtn);
-      isProcessing = false;
-      return;
-  }
+    // Final Final Step
+    if (continueBtn && !emailField && !pinField && !otpField && !sendCodeBtnTrigger) {
+        await humanClick(continueBtn);
+    }
 
-  isProcessing = false; // Release lock
+  isProcessing = false; 
 } catch (error) {
-  console.error("[Auto-Login] Error in automation loop:", error);
-  isProcessing = false; // Release lock on error
+  isProcessing = false;
 }
 }
 
 // ---------------------------------------------------------
 // RE-START TRIGGER ON MESSAGE
-// ---------------------------------------------------------
 chrome.runtime.onMessage.addListener((request) => {
     if (request.action === "START_AUTOMATION") {
-        console.log("[Auto-Login] Start message received from Popup.");
+        lockdownActive = false;
         runAutoLogin();
     }
 });
 
-// Run automation on page load and periodically
-window.addEventListener("load", () => {
-  setTimeout(runAutoLogin, 2500);
-});
+// Initial start delay
+setTimeout(() => {
+    runAutoLogin();
+}, 2500);
 
-// Periodic check for interaction signals
+// Heartbeat to catch page changes or redirects
 setInterval(() => {
-    if (window.location.href.includes("#/login")) {
-         const emailInput = document.getElementById("login");
-         const pinInput = document.getElementById("pin");
-         const otpInput = document.getElementById("input-test-id-confirmOtp");
-         const sendCodeBtn = document.querySelector('[data-test-id="button-submit"]');
-         const finalContinueBtn = document.querySelector('[data-test-id="button-continue"]');
-         
-         const isSendCodeScreen = sendCodeBtn && sendCodeBtn.textContent.includes("Send verification code");
-         
-         const shouldTriggerEmail = emailInput && !emailInput.dataset.automationProcessed && !emailInput.value;
-         const shouldTriggerPin = pinInput && !pinInput.dataset.automationProcessed && !pinInput.value;
-         const shouldTriggerSendCode = isSendCodeScreen && !sendCodeBtn.dataset.automationProcessed;
-         const shouldTriggerOtp = otpInput && !otpInput.dataset.automationProcessed && !otpInput.value;
-         
-         // Only trigger final continue if it's not the email/pin phase
-         const shouldTriggerFinalContinue = finalContinueBtn && 
-                                           !finalContinueBtn.dataset.automationProcessed && 
-                                           !emailInput && !pinInput;
-
-         if (shouldTriggerEmail || shouldTriggerPin || shouldTriggerSendCode || shouldTriggerOtp || shouldTriggerFinalContinue) {
-             console.log("[Auto-Login] Interaction detected. Triggering automation...");
-             if (emailInput) emailInput.dataset.automationProcessed = "true";
-             if (pinInput) pinInput.dataset.automationProcessed = "true";
-             if (sendCodeBtn) sendCodeBtn.dataset.automationProcessed = "true";
-             if (otpInput) otpInput.dataset.automationProcessed = "true";
-             if (finalContinueBtn) finalContinueBtn.dataset.automationProcessed = "true";
-             runAutoLogin();
-         }
+    if (!lockdownActive && !isProcessing) {
+        runAutoLogin();
     }
-}, 3000);
+}, 5000);
