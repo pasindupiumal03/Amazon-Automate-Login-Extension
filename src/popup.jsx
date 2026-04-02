@@ -7,7 +7,7 @@ const LOGIN_URL = "https://auth.hiring.amazon.com/#/login";
 
 function Popup() {
   const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("");
+  const [pin, setPin] = useState("122222"); // Default PIN as requested
   const [gasUrl, setGasUrl] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState({ type: "info", message: "Ready to start" });
@@ -74,6 +74,64 @@ function Popup() {
     setStatus({ type: "info", message: "Automation Stopped" });
   };
 
+  const saveGmailToStorage = async () => {
+    if (!email) {
+        setStatus({ type: "error", message: "Please enter a Gmail address" });
+        return;
+    }
+    await saveToStorage({ gmailEmail: email });
+    setStatus({ type: "success", message: "Gmail address saved!" });
+    setTimeout(() => setStatus({ type: "info", message: "Ready to start" }), 2000);
+  };
+
+  const savePinToStorage = async () => {
+    if (!pin) {
+        setStatus({ type: "error", message: "Please enter a PIN" });
+        return;
+    }
+    await saveToStorage({ personalPin: pin });
+    setStatus({ type: "success", message: "PIN saved!" });
+    setTimeout(() => setStatus({ type: "info", message: "Ready to start" }), 2000);
+  };
+
+  const saveGasUrlToStorage = async () => {
+    const trimmedUrl = gasUrl.trim();
+    if (!trimmedUrl) {
+        setStatus({ type: "error", message: "Please enter a GAS URL" });
+        return;
+    }
+    await saveToStorage({ gasScriptUrl: trimmedUrl });
+    setStatus({ type: "info", message: "GAS URL saved! Fetching Gmail..." });
+
+    try {
+        // GAS requests can be redirected, fetch will normally handle this.
+        const fetchUrl = `${trimmedUrl}${trimmedUrl.includes('?') ? '&' : '?'}type=getEmail`;
+        console.log("[Auto-Discovery] Attempting fetch from:", fetchUrl);
+        
+        const response = await fetch(fetchUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        console.log("[Auto-Discovery] Response:", data);
+        
+        if (data.email) {
+            setEmail(data.email);
+            await saveToStorage({ gmailEmail: data.email });
+            setStatus({ type: "success", message: "Gmail address fetched & saved!" });
+        } else if (data.error) {
+            console.error("GAS responded with error:", data.error);
+            setStatus({ type: "error", message: `Script error: ${data.error}` });
+        } else {
+            setStatus({ type: "success", message: "URL saved (Manual entry needed)" });
+        }
+    } catch (err) {
+        console.error("Failed to fetch email from GAS:", err);
+        setStatus({ type: "error", message: "Check URL or Deployment Settings" });
+    }
+
+    setTimeout(() => setStatus({ type: "info", message: "Ready to start" }), 3000);
+  };
+
   return (
     <div className="w-full h-full bg-white flex flex-col font-sans">
       <div className="p-8 pb-10 flex items-center gap-4 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-b-3xl shadow-lg mb-8">
@@ -87,45 +145,75 @@ function Popup() {
       <div className="px-8 space-y-6 flex-grow">
         <div className="space-y-2">
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Connect Gmail</label>
-          <div className="relative group">
+          <div className="relative group flex items-center">
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isRunning}
               placeholder="example@gmail.com"
-              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[15px] text-gray-800 placeholder-gray-400 font-medium"
+              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[15px] text-gray-800 placeholder-gray-400 font-medium pr-14"
             />
+            <button 
+              onClick={saveGmailToStorage}
+              disabled={isRunning}
+              className="absolute right-2 p-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-gray-100 shadow-sm active:scale-95 disabled:opacity-50"
+              title="Save Email"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </button>
             <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
           </div>
         </div>
 
         <div className="space-y-2">
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Access PIN</label>
-          <div className="relative group">
+          <div className="relative group flex items-center">
             <input
               type="password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               disabled={isRunning}
               placeholder="••••••"
-              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[15px] text-gray-800 placeholder-gray-400 font-bold tracking-widest"
+              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[15px] text-gray-800 placeholder-gray-400 font-bold tracking-widest pr-14"
             />
+            <button 
+              onClick={savePinToStorage}
+              disabled={isRunning}
+              className="absolute right-2 p-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-gray-100 shadow-sm active:scale-95 disabled:opacity-50"
+              title="Save PIN"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </button>
             <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
           </div>
         </div>
 
         <div className="space-y-2">
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Gmail Fetcher URL (GAS)</label>
-          <div className="relative group">
+          <div className="relative group flex items-center">
             <input
               type="text"
               value={gasUrl}
               onChange={(e) => setGasUrl(e.target.value)}
               disabled={isRunning}
               placeholder="https://script.google.com/macros/s/..."
-              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[12px] text-gray-800 placeholder-gray-400"
+              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[12px] text-gray-800 placeholder-gray-400 pr-14"
             />
+            <button 
+              onClick={saveGasUrlToStorage}
+              disabled={isRunning}
+              className="absolute right-2 p-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-gray-100 shadow-sm active:scale-95 disabled:opacity-50"
+              title="Save GAS URL"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </button>
             <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
           </div>
         </div>
