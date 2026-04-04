@@ -1,142 +1,75 @@
-# ReactJS Chrome Extension Template
+# 🚀 AutomatePro: Amazon Hiring Portal Login Engine
 
-A modern, production-ready template for building Chrome extensions with ReactJS, TailwindCSS, and Webpack.
+AutomatePro is a high-performance, professional Chrome extension designed to provide a completely hands-free login experience for the Amazon Hiring portal (`auth.hiring.amazon.com`). It automates every step of the security flow, including credential entry, PIN verification, and automated OTP retrieval from Gmail.
 
-## Features
+![AutomatePro Logo](./src/assets/icons/logo.png)
 
-- ⚛️ **React 18** - Modern React with hooks and functional components
-- 🎨 **TailwindCSS** - Utility-first CSS framework for rapid styling
-- 📦 **Webpack 5** - Modern bundling with development and production configs
-- 🔄 **Hot Reload** - Development mode with file watching
-- 🎯 **Manifest V3** - Latest Chrome extension API
-- 🌟 **Shadow DOM** - Isolated content script rendering
-- 💾 **Storage Controller** - Easy Chrome storage API integration
-- 🔧 **Cross-browser** - Chrome and Firefox compatibility
-- 📱 **Responsive** - Mobile-friendly popup design
+## ✨ Key Features
 
-## Project Structure
+- **⚡ Instant Automation**: Skip manual typing. The engine fills your Gmail, Personal PIN, and OTP directly and instantly.
+- **🛡️ Stealth Monitoring**: Uses advanced `MutationObserver` technology to watch the page silently, minimizing detection risks.
+- **🔒 Captcha Hard-Lock**: Automatically detects captchas and enters a 15-second "Lockdown Mode" to allow solvers like NopeCHA to work without interference.
+- **📧 Gmail OTP Bridge**: Connects to a custom Google Apps Script (GAS) to fetch recruitment verification codes directly from your inbox.
+- **🔄 Session Self-Healing**: Automatically detects session expirations and clicks "Sign In" to restart the login flow.
+- **🎨 Premium UI/UX**: Modern, minimalist React-based popup interface with field-level persistence and auto-discovery.
 
-```
-├── public/
-│   └── manifest.json          # Extension manifest
-├── src/
-│   ├── popup.jsx             # Extension popup component
-│   ├── popup.html            # Popup HTML template
-│   ├── content.jsx           # Content script entry
-│   ├── background.jsx        # Background service worker
-│   ├── shadowRoot.jsx        # Shadow DOM content injection
-│   ├── App.jsx               # Main app component for content
-│   ├── index.css             # Popup styles
-│   ├── shadow-root.css       # Content script styles
-│   ├── assets/
-│   │   ├── icons/            # Extension icons
-│   │   └── fonts/            # Custom fonts
-│   ├── controllers/
-│   │   └── storageController.js  # Chrome storage utilities
-│   └── utils/
-│       └── browser.js        # Cross-browser compatibility
-├── webpack.config.js         # Base webpack configuration
-├── webpack.dev.js           # Development webpack config
-├── webpack.prod.js          # Production webpack config
-├── babel.config.json        # Babel configuration
-├── tailwind.config.js       # TailwindCSS configuration
-├── postcss.config.js        # PostCSS configuration
-└── package.json             # Dependencies and scripts
-```
+---
 
-## Getting Started
+## 🛠️ Installation
 
-### Prerequisites
+### 1. Developer Mode
+1. Download or clone this repository.
+2. Open Chrome and navigate to `chrome://extensions/`.
+3. Enable **Developer mode** (toggle in the top-right corner).
+4. Click **Load unpacked** and select the `dist/` folder of this project.
 
-- Node.js (v16 or higher)
-- npm or yarn
-
-### Installation
-
-1. Clone or download this template
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-### Development
-
-1. Start development mode with file watching:
-   ```bash
-   npm run dev
-   ```
-
-2. Load the extension in Chrome:
-   - Open `chrome://extensions/`
-   - Enable "Developer mode"
-   - Click "Load unpacked" and select the `dist` folder
-
-### Production Build
-
-Build for production:
+### 2. Building from Source
+If you make changes to the code, you must rebuild the extension:
 ```bash
-npm run build
+yarn install
+yarn build
 ```
 
-## Usage
+---
 
-### Popup Extension
-The main popup interface is defined in `src/popup.jsx`. This appears when users click the extension icon.
+## ⚙️ Setup Guide (Gmail OTP Bridge)
 
-### Content Script
-Content scripts run on web pages and can inject UI elements. The template includes Shadow DOM setup for isolated styling.
+To enable automatic OTP retrieval, you must deploy the Gmail bridge script:
 
-### Background Script
-Background scripts handle extension lifecycle events, API calls, and communication between components.
+1. Go to [script.google.com](https://script.google.com).
+2. Create a **New Project**.
+3. Copy the contents of `scripts/gas_bridge.js` into the editor.
+4. Click **Deploy** > **New Deployment**.
+5. **Select Type**: Web App.
+6. **Execute as**: Me (Your Gmail).
+7. **Who has access**: Anyone (Required for the extension to communicate).
+8. Click **Deploy** and copy the **Web App URL**.
 
-### Storage
-Use the storage controller for persistent data:
-```javascript
-import { saveToStorage, getFromStorage } from './controllers/storageController.js';
+---
 
-// Save data
-await saveToStorage({ key: 'value' });
+## 🚀 How to Use
 
-// Get data
-const data = await getFromStorage(['key']);
-```
+1. **Connect API**: Paste your Gmail Bridge URL into the "GAS URL" field in the popup and click the **Save Icon**.
+2. **Auto-Discovery**: The extension will automatically fetch and save your Gmail address from the API.
+3. **Configure PIN**: Enter your **Personal PIN** and click the Save icon.
+4. **Launch**: Navigate to the Amazon Hiring login page and click **Launch Automation**.
+5. **Sit Back**: The engine will now handle the entire sequence:
+   - Types Email/PIN.
+   - Requests verification code.
+   - Waits for Captcha solve (if present).
+   - Fetches & fills OTP from Gmail.
+   - Clicks final Continue to enter the dashboard.
 
-## Customization
+---
 
-### Styling
-- Modify `tailwind.config.js` for theme customization
-- Update `src/index.css` for popup styles
-- Update `src/shadow-root.css` for content script styles
+## 🧪 Technical Stack
 
-### Permissions
-Add required permissions in `public/manifest.json`:
-```json
-{
-  "permissions": ["storage", "activeTab", "tabs"]
-}
-```
+- **Frontend**: React, Tailwind CSS, Webpack.
+- **Storage**: `chrome.storage.local` for per-profile persistence.
+- **Logic**: Vanilla JavaScript with custom Human-Emulation utilities.
+- **Bridge**: Google Apps Script (GAS) with Gmail API integration.
 
-### Icons
-Replace icons in `src/assets/icons/` with your own (16px, 32px, 48px, 64px, 128px).
+## 🤝 Support & Safety
+This tool is designed for personal productivity. Ensure you comply with Amazon's Terms of Service while using automation tools.
 
-## Browser Compatibility
-
-- ✅ Chrome (Manifest V3)
-- ✅ Firefox (with minor adjustments)
-- ⚠️ Edge (Chromium-based)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## License
-
-This project is licensed under the ISC License.
-
-## Support
-
-For issues and questions, please create an issue in the repository.
+**Built for high-volume recruitment professionals.**
