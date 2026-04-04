@@ -3,55 +3,61 @@ import { createRoot } from "react-dom/client";
 import { saveToStorage, getFromStorage } from "./controllers/storageController.js";
 import "./index.css";
 
-const LOGIN_URL = "https://auth.hiring.amazon.com/#/login";
+// SVG Icons
+const SaveIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+    </svg>
+);
+
+const EmailIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M1.5 8.67v8.58a3 3 0 003 3h15a3 3 0 003-3V8.67l-8.928 5.493a3 3 0 01-3.144 0L1.5 8.67z" />
+        <path d="M22.5 6.908V6.75a3 3 0 00-3-3h-15a3 3 0 00-3 3v.158l9.714 5.978a1.5 1.5 0 001.572 0L22.5 6.908z" />
+    </svg>
+);
+
+const KeyIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+        <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3A5.25 5.25 0 0012 1.5zm-3.75 5.25a3.75 3.75 0 117.5 0v3h-7.5v-3z" clipRule="evenodd" />
+    </svg>
+);
+
+const LinkIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+        <path fillRule="evenodd" d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.452l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.452l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-.353-1z" clipRule="evenodd" />
+    </svg>
+);
 
 function Popup() {
   const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("122222"); // Default PIN as requested
+  const [pin, setPin] = useState("");
   const [gasUrl, setGasUrl] = useState("");
   const [isRunning, setIsRunning] = useState(false);
-  const [status, setStatus] = useState({ type: "info", message: "Ready to start" });
-  const [isFirstTime, setIsFirstTime] = useState(true);
+  const [status, setStatus] = useState({ type: "info", message: "Ready to start automation" });
 
   useEffect(() => {
-    // Load saved credentials and status on mount
     getFromStorage(["gmailEmail", "personalPin", "gasScriptUrl", "isAutomationRunning"]).then((res) => {
       if (res.gmailEmail) setEmail(res.gmailEmail);
       if (res.personalPin) setPin(res.personalPin);
       if (res.gasScriptUrl) setGasUrl(res.gasScriptUrl);
       if (res.isAutomationRunning) setIsRunning(res.isAutomationRunning);
-      if (res.gmailEmail && res.personalPin) setIsFirstTime(false);
     });
   }, []);
 
   const handleStart = async () => {
-    if (!email || !pin) {
-      setStatus({ type: "error", message: "Please enter both Email and PIN" });
+    if (!email || !pin || !gasUrl) {
+      setStatus({ type: "error", message: "All fields are required" });
       return;
     }
 
-    // Check URL
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
     if (!tab.url.startsWith("https://auth.hiring.amazon.com/")) {
-        setStatus({ type: "error", message: "Please navigate to the Amazon Login page first" });
-        return;
+      setStatus({ type: "error", message: "Please navigate to Amazon Login first" });
+      return;
     }
 
-    // Since the login URL has a hash, we check if it is included
-    if (!tab.url.includes("#/login")) {
-        setStatus({ type: "error", message: "Not on the login page (#/login)" });
-        return;
-    }
-
-    await saveToStorage({ 
-        gmailEmail: email, 
-        personalPin: pin, 
-        gasScriptUrl: gasUrl,
-        isAutomationRunning: true 
-    });
-    
-    // Notify the current tab to start automation immediately
+    await saveToStorage({ gmailEmail: email, personalPin: pin, gasScriptUrl: gasUrl, isAutomationRunning: true });
     try {
         await chrome.tabs.sendMessage(tab.id, { 
             action: "START_AUTOMATION",
@@ -59,205 +65,170 @@ function Popup() {
             personalPin: pin,
             gasUrl: gasUrl
         });
-    } catch (e) {
-        console.log("Could not send START_AUTOMATION message. Content script might not be loaded yet.");
-    }
+    } catch (e) {}
 
     setIsRunning(true);
-    setIsFirstTime(false);
-    setStatus({ type: "success", message: "Automation Started!" });
+    setStatus({ type: "success", message: "Automation active" });
   };
 
   const handleStop = async () => {
     await saveToStorage({ isAutomationRunning: false });
     setIsRunning(false);
-    setStatus({ type: "info", message: "Automation Stopped" });
+    setStatus({ type: "info", message: "Automation paused" });
   };
 
-  const saveGmailToStorage = async () => {
-    if (!email) {
-        setStatus({ type: "error", message: "Please enter a Gmail address" });
+  const saveField = async (key, val, label) => {
+    if (!val) {
+        setStatus({ type: "error", message: `${label} cannot be empty` });
         return;
     }
-    await saveToStorage({ gmailEmail: email });
-    setStatus({ type: "success", message: "Gmail address saved!" });
-    setTimeout(() => setStatus({ type: "info", message: "Ready to start" }), 2000);
-  };
-
-  const savePinToStorage = async () => {
-    if (!pin) {
-        setStatus({ type: "error", message: "Please enter a PIN" });
-        return;
-    }
-    await saveToStorage({ personalPin: pin });
-    setStatus({ type: "success", message: "PIN saved!" });
-    setTimeout(() => setStatus({ type: "info", message: "Ready to start" }), 2000);
-  };
-
-  const saveGasUrlToStorage = async () => {
-    const trimmedUrl = gasUrl.trim();
-    if (!trimmedUrl) {
-        setStatus({ type: "error", message: "Please enter a GAS URL" });
-        return;
-    }
-    await saveToStorage({ gasScriptUrl: trimmedUrl });
-    setStatus({ type: "info", message: "GAS URL saved! Fetching Gmail..." });
-
-    try {
-        // GAS requests can be redirected, fetch will normally handle this.
-        const fetchUrl = `${trimmedUrl}${trimmedUrl.includes('?') ? '&' : '?'}type=getEmail`;
-        console.log("[Auto-Discovery] Attempting fetch from:", fetchUrl);
-        
-        const response = await fetch(fetchUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        
-        const data = await response.json();
-        console.log("[Auto-Discovery] Response:", data);
-        
-        if (data.email) {
-            setEmail(data.email);
-            await saveToStorage({ gmailEmail: data.email });
-            setStatus({ type: "success", message: "Gmail address fetched & saved!" });
-        } else if (data.error) {
-            console.error("GAS responded with error:", data.error);
-            setStatus({ type: "error", message: `Script error: ${data.error}` });
-        } else {
-            setStatus({ type: "success", message: "URL saved (Manual entry needed)" });
+    const storageKey = key === 'email' ? 'gmailEmail' : (key === 'pin' ? 'personalPin' : 'gasScriptUrl');
+    
+    // If it's the GAS URL, let's also try to fetch the email
+    if (key === 'gas') {
+        setStatus({ type: "info", message: "Saving URL... Fetching email" });
+        try {
+            const fetchUrl = `${val}${val.includes('?') ? '&' : '?'}type=getEmail`;
+            const resp = await fetch(fetchUrl);
+            const data = await resp.json();
+            if (data.email) {
+                setEmail(data.email);
+                await saveToStorage({ [storageKey]: val, gmailEmail: data.email });
+                setStatus({ type: "success", message: "Config & Email saved!" });
+            } else {
+                await saveToStorage({ [storageKey]: val });
+                setStatus({ type: "success", message: "Config saved" });
+            }
+        } catch (e) {
+            await saveToStorage({ [storageKey]: val });
+            setStatus({ type: "success", message: "Config saved (Manual email entry needed)" });
         }
-    } catch (err) {
-        console.error("Failed to fetch email from GAS:", err);
-        setStatus({ type: "error", message: "Check URL or Deployment Settings" });
+    } else {
+        await saveToStorage({ [storageKey]: val });
+        setStatus({ type: "success", message: `${label} saved` });
     }
-
-    setTimeout(() => setStatus({ type: "info", message: "Ready to start" }), 3000);
+    setTimeout(() => setStatus({ type: "info", message: isRunning ? "Automation active" : "Ready to start automation" }), 3000);
   };
 
   return (
-    <div className="w-full h-full bg-white flex flex-col font-sans">
-      <div className="p-8 pb-10 flex items-center gap-4 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-b-3xl shadow-lg mb-8">
-        <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white font-bold text-2xl border border-white/30 shadow-inner">A</div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Auto-Login</h1>
-          <p className="text-xs text-blue-100 font-medium tracking-widest uppercase opacity-80">Amazon Recruitment Tool</p>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-100 p-6 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <img src="./assets/icons/logo.png" alt="Logo" className="w-10 h-10 object-contain shadow-sm rounded-lg" />
+          <div>
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-none bg-gradient-to-r from-blue-700 to-indigo-800 bg-clip-text text-transparent">AutomatePro</h1>
+          </div>
+        </div>
+        <div className="flex flex-col items-end">
+            <span className={`text-[10px] font-black uppercase tracking-tighter ${isRunning ? 'text-green-500' : 'text-slate-300'}`}>
+                {isRunning ? '● Live' : '● Off'}
+            </span>
         </div>
       </div>
 
-      <div className="px-8 space-y-6 flex-grow">
-        <div className="space-y-2">
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Connect Gmail</label>
-          <div className="relative group flex items-center">
+      {/* Main Content */}
+      <div className="flex-grow p-6 space-y-5">
+        
+        {/* Email Field */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">Gmail Address</label>
+          <div className="relative flex items-center">
+            <div className="absolute left-4 z-10"><EmailIcon /></div>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isRunning}
               placeholder="example@gmail.com"
-              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[15px] text-gray-800 placeholder-gray-400 font-medium pr-14"
+              className="w-full pl-11 pr-14 py-3.5 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-medium shadow-sm text-slate-700 placeholder-slate-300"
             />
             <button 
-              onClick={saveGmailToStorage}
+              onClick={() => saveField('email', email, 'Email')}
               disabled={isRunning}
-              className="absolute right-2 p-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-gray-100 shadow-sm active:scale-95 disabled:opacity-50"
-              title="Save Email"
+              className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
+              <SaveIcon />
             </button>
-            <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Access PIN</label>
-          <div className="relative group flex items-center">
+        {/* PIN Field */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">Personal PIN</label>
+          <div className="relative flex items-center">
+            <div className="absolute left-4 z-10"><KeyIcon /></div>
             <input
               type="password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               disabled={isRunning}
               placeholder="••••••"
-              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[15px] text-gray-800 placeholder-gray-400 font-bold tracking-widest pr-14"
+              className="w-full pl-11 pr-14 py-3.5 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-bold shadow-sm tracking-[0.2em] text-slate-700"
             />
             <button 
-              onClick={savePinToStorage}
+              onClick={() => saveField('pin', pin, 'PIN')}
               disabled={isRunning}
-              className="absolute right-2 p-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-gray-100 shadow-sm active:scale-95 disabled:opacity-50"
-              title="Save PIN"
+              className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
+              <SaveIcon />
             </button>
-            <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Gmail Fetcher URL (GAS)</label>
-          <div className="relative group flex items-center">
+        {/* GAS Fetcher URL */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">GAS URL</label>
+          <div className="relative flex items-center">
+            <div className="absolute left-4 z-10"><LinkIcon /></div>
             <input
               type="text"
               value={gasUrl}
               onChange={(e) => setGasUrl(e.target.value)}
               disabled={isRunning}
-              placeholder="https://script.google.com/macros/s/..."
-              className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-[12px] text-gray-800 placeholder-gray-400 pr-14"
+              placeholder="https://script.google.com/..."
+              className="w-full pl-11 pr-14 py-3.5 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-[11px] font-medium shadow-sm text-slate-600 truncate"
             />
             <button 
-              onClick={saveGasUrlToStorage}
+              onClick={() => saveField('gas', gasUrl, 'API URL')}
               disabled={isRunning}
-              className="absolute right-2 p-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-gray-100 shadow-sm active:scale-95 disabled:opacity-50"
-              title="Save GAS URL"
+              className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
+              <SaveIcon />
             </button>
-            <div className="absolute inset-0 rounded-2xl pointer-events-none border border-transparent group-hover:border-gray-200 transition-colors"></div>
           </div>
         </div>
 
-        {status.message && (
-          <div className={`p-4 rounded-2xl text-sm font-semibold flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${
-            status.type === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
-            status.type === "error" ? "bg-rose-50 text-rose-700 border border-rose-100" :
-            "bg-blue-50 text-blue-700 border border-blue-100"
-          }`}>
-            <div className={`w-2 h-2 rounded-full ${
-              status.type === "success" ? "bg-emerald-500" : 
-              status.type === "error" ? "bg-rose-500" : 
-              "bg-blue-500 animate-pulse"
-            }`}></div>
-            {status.message}
-          </div>
-        )}
+        {/* Status Message */}
+        <div className={`p-4 rounded-2xl text-[11px] font-bold uppercase tracking-tight transition-all duration-500 border overflow-hidden whitespace-nowrap overflow-ellipsis ${
+          status.type === "success" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+          status.type === "error" ? "bg-rose-50 text-rose-500 border-rose-100" :
+          "bg-blue-50 text-blue-500 border-blue-100"
+        }`}>
+          {status.message}
+        </div>
       </div>
 
-      <div className="p-8 pt-4 flex flex-col gap-4">
+      {/* Action Footer */}
+      <div className="p-6 pt-0">
         {!isRunning ? (
           <button
             onClick={handleStart}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-3 text-lg"
+            className="w-full group relative bg-slate-900 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all duration-300 shadow-xl shadow-slate-200 active:scale-[0.98] flex items-center justify-center gap-3 text-[15px]"
           >
-            Start Session
+            Launch Automation
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
           </button>
         ) : (
           <button
             onClick={handleStop}
-            className="w-full bg-white border-2 border-gray-100 hover:border-gray-200 text-gray-600 hover:text-rose-500 font-bold py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-3 text-lg shadow-sm"
+            className="w-full bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-500 font-bold py-4 rounded-2xl transition-all border-2 border-slate-100 hover:border-rose-100 active:scale-[0.98] flex items-center justify-center gap-2 text-[15px] shadow-sm"
           >
-            Stop Automation
+            Kill Process
           </button>
         )}
-
-        <div className="flex justify-between items-center text-[11px] text-gray-400 font-bold uppercase tracking-tighter pt-4 border-t border-gray-50">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isRunning ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-gray-200"}`}></span>
-            {isRunning ? "Engine Active" : "Engine Standby"}
-          </div>
-          <div className="bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">Release V1.0</div>
-        </div>
       </div>
     </div>
   );
