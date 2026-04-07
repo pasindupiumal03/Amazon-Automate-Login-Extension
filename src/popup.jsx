@@ -11,20 +11,20 @@ const SaveIcon = () => (
 );
 
 const EmailIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="currentColor">
         <path d="M1.5 8.67v8.58a3 3 0 003 3h15a3 3 0 003-3V8.67l-8.928 5.493a3 3 0 01-3.144 0L1.5 8.67z" />
         <path d="M22.5 6.908V6.75a3 3 0 00-3-3h-15a3 3 0 00-3 3v.158l9.714 5.978a1.5 1.5 0 001.572 0L22.5 6.908z" />
     </svg>
 );
 
 const KeyIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="currentColor">
         <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3A5.25 5.25 0 0012 1.5zm-3.75 5.25a3.75 3.75 0 117.5 0v3h-7.5v-3z" clipRule="evenodd" />
     </svg>
 );
 
 const LinkIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="currentColor">
         <path fillRule="evenodd" d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.452l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.452l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-.353-1z" clipRule="evenodd" />
     </svg>
 );
@@ -130,7 +130,7 @@ function Popup() {
       {/* Header */}
       <div className="bg-white border-b border-slate-100 p-6 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <img src="./assets/icons/logo.png" alt="Logo" className="w-10 h-10 object-contain shadow-sm rounded-lg" />
+          <img src="./assets/icons/logo.jpg" alt="Logo" className="w-10 h-10 object-contain shadow-sm rounded-lg" />
           <div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-none bg-gradient-to-r from-blue-700 to-indigo-800 bg-clip-text text-transparent">AutomatePro</h1>
           </div>
@@ -147,17 +147,17 @@ function Popup() {
         
         {/* OTP Collection Method Toggle */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">OTP Fetching Strategy</label>
-          <div className="flex bg-slate-100 p-1 rounded-2xl">
+          <label className="text-[11px] font-bold text-slate-600 uppercase ml-1 tracking-tight">OTP Fetching Strategy</label>
+          <div className="flex bg-slate-200 p-1 rounded-2xl">
             <button
               onClick={() => toggleMethod("api")}
-              className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all ${otpMethod === "api" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex-1 py-2 text-[10px] font-extrabold uppercase rounded-xl transition-all ${otpMethod === "api" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
             >
               API (GAS Bridge)
             </button>
             <button
               onClick={() => toggleMethod("tab")}
-              className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all ${otpMethod === "tab" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`flex-1 py-2 text-[10px] font-extrabold uppercase rounded-xl transition-all ${otpMethod === "tab" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
             >
               Gmail (Opened Tab)
             </button>
@@ -166,7 +166,7 @@ function Popup() {
 
         {/* Email Field */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">Gmail Address</label>
+          <label className="text-[11px] font-bold text-slate-600 uppercase ml-1 tracking-tight">Gmail Address</label>
           <div className="relative flex items-center">
             <div className="absolute left-4 z-10"><EmailIcon /></div>
             <input
@@ -175,12 +175,12 @@ function Popup() {
               onChange={(e) => setEmail(e.target.value)}
               disabled={isRunning}
               placeholder="example@gmail.com"
-              className="w-full pl-11 pr-14 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-medium shadow-sm text-slate-700 placeholder-slate-300"
+              className="w-full pl-11 pr-14 py-3 bg-white border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-semibold shadow-sm text-slate-900 placeholder-slate-300"
             />
             <button 
               onClick={() => saveField('email', email, 'Email')}
               disabled={isRunning}
-              className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
+              className="absolute right-2 p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-blue-600 rounded-xl transition-all border border-slate-200 active:scale-95 disabled:hidden"
             >
               <SaveIcon />
             </button>
@@ -189,7 +189,7 @@ function Popup() {
 
         {/* PIN Field */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">Personal PIN</label>
+          <label className="text-[11px] font-bold text-slate-600 uppercase ml-1 tracking-tight">Personal PIN</label>
           <div className="relative flex items-center">
             <div className="absolute left-4 z-10"><KeyIcon /></div>
             <input
@@ -198,12 +198,12 @@ function Popup() {
               onChange={(e) => setPin(e.target.value)}
               disabled={isRunning}
               placeholder="••••••"
-              className="w-full pl-11 pr-14 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-bold shadow-sm tracking-[0.2em] text-slate-700"
+              className="w-full pl-11 pr-14 py-3 bg-white border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-bold shadow-sm tracking-[0.2em] text-slate-900"
             />
             <button 
               onClick={() => saveField('pin', pin, 'PIN')}
               disabled={isRunning}
-              className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
+              className="absolute right-2 p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-blue-600 rounded-xl transition-all border border-slate-200 active:scale-95 disabled:hidden"
             >
               <SaveIcon />
             </button>
@@ -213,7 +213,7 @@ function Popup() {
         {/* GAS Fetcher URL - Hidden if Tab method is selected */}
         {otpMethod === "api" && (
           <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-300">
-            <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">GAS URL</label>
+            <label className="text-[11px] font-bold text-slate-600 uppercase ml-1 tracking-tight">GAS URL</label>
             <div className="relative flex items-center">
               <div className="absolute left-4 z-10"><LinkIcon /></div>
               <input
@@ -222,12 +222,12 @@ function Popup() {
                 onChange={(e) => setGasUrl(e.target.value)}
                 disabled={isRunning}
                 placeholder="https://script.google.com/..."
-                className="w-full pl-11 pr-14 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-[11px] font-medium shadow-sm text-slate-600 truncate"
+                className="w-full pl-11 pr-14 py-3 bg-white border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-[11px] font-bold shadow-sm text-slate-900 truncate"
               />
               <button 
                 onClick={() => saveField('gas', gasUrl, 'API URL')}
                 disabled={isRunning}
-                className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
+                className="absolute right-2 p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-blue-600 rounded-xl transition-all border border-slate-200 active:scale-95 disabled:hidden"
               >
                 <SaveIcon />
               </button>
@@ -250,18 +250,21 @@ function Popup() {
         {!isRunning ? (
           <button
             onClick={handleStart}
-            className="w-full group relative bg-slate-900 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-all duration-300 shadow-xl shadow-slate-200 active:scale-[0.98] flex items-center justify-center gap-3 text-[15px]"
+            className="w-full group relative bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition-all duration-300 shadow-xl shadow-indigo-100 active:scale-[0.98] flex items-center justify-center gap-3 text-[15px]"
           >
             Launch Automation
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
             </svg>
           </button>
         ) : (
           <button
             onClick={handleStop}
-            className="w-full bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-500 font-bold py-4 rounded-2xl transition-all border-2 border-slate-100 hover:border-rose-100 active:scale-[0.98] flex items-center justify-center gap-2 text-[15px] shadow-sm"
+            className="w-full bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-rose-100 active:scale-[0.98] flex items-center justify-center gap-2 text-[15px]"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z" clipRule="evenodd" />
+            </svg>
             Kill Process
           </button>
         )}
