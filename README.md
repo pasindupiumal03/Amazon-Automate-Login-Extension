@@ -2,7 +2,7 @@
 
 AutomatePro is a high-performance, professional Chrome extension designed to provide a completely hands-free login experience for the Amazon Hiring portal (`auth.hiring.amazon.com`). It automates every step of the security flow, including credential entry, PIN verification, and automated OTP retrieval from Gmail.
 
-![AutomatePro Logo](./src/assets/icons/logo.png)
+![AutomatePro Logo](./src/assets/icons/logo.jpg)
 
 ## ✨ Key Features
 
@@ -18,13 +18,16 @@ AutomatePro is a high-performance, professional Chrome extension designed to pro
 ## 🛠️ Installation
 
 ### 1. Developer Mode
+
 1. Download or clone this repository.
 2. Open Chrome and navigate to `chrome://extensions/`.
 3. Enable **Developer mode** (toggle in the top-right corner).
 4. Click **Load unpacked** and select the `dist/` folder of this project.
 
 ### 2. Building from Source
+
 If you make changes to the code, you must rebuild the extension:
+
 ```bash
 yarn install
 yarn build
@@ -70,6 +73,7 @@ To enable automatic OTP retrieval, you must deploy the Gmail bridge script:
 - **Bridge**: Google Apps Script (GAS) with Gmail API integration.
 
 ## 🤝 Support & Safety
+
 This tool is designed for personal productivity. Ensure you comply with Amazon's Terms of Service while using automation tools.
 
 **Built for high-volume recruitment professionals.**

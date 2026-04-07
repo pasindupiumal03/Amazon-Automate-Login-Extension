@@ -14,43 +14,62 @@ if (window.location.hostname === "mail.google.com") {
     
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === "EXTRACT_GMAIL_OTP") {
-            console.log("[Auto-Login] Received OTP extraction request...");
-            
-            // Priority 1: Search only within the active message body (Gmail's message content class)
-            // This avoids fetching numbers from the sidebar, subject lines, or other emails.
-            const messageBodies = Array.from(document.querySelectorAll('div.ii.gt, div[role="main"]'));
+            console.log("[Auto-Login] Scanning Gmail for the absolute latest OTP...");
+
             let foundOtp = null;
 
-            for (const body of messageBodies) {
-                const text = body.innerText;
-                // Look specifically for 6 digits near 'verification' or 'Amazon Jobs'
-                const contextualMatch = text.match(/(?:verification|code|amazon|jobs).*?\b(\d{6})\b/is);
-                if (contextualMatch) {
-                    foundOtp = contextualMatch[1];
-                    break;
+            // 1. Priority: Inbox List Rows (Top-Most)
+            // This works even if Conversation View is ON or OFF.
+            const inboxRows = Array.from(document.querySelectorAll('tr[role="row"], div[role="row"]'));
+            if (inboxRows.length > 0) {
+                // Focus ONLY on the first 2 rows (most recent)
+                for (let i = 0; i < Math.min(inboxRows.length, 3); i++) {
+                    const rowText = inboxRows[i].innerText + " " + (inboxRows[i].getAttribute('aria-label') || "");
+                    const matches = rowText.match(/(?:^|[^0-9])(\d{6})(?:[^0-9]|$)/);
+                    if (matches) {
+                        const code = matches[1];
+                        if (rowText.toLowerCase().includes("amazon") || rowText.toLowerCase().includes("job")) {
+                            foundOtp = code;
+                            console.log("[Auto-Login] Found code in Inbox Row:", foundOtp);
+                            break;
+                        }
+                    }
                 }
             }
 
-            // Priority 2: Fallback to searching the entire body with contextual regex
+            // 2. Secondary: Inside an open Thread (Bottom-Up)
+            if (!foundOtp) {
+                const messages = Array.from(document.querySelectorAll('div[role="listitem"]')).reverse();
+                for (const msg of messages) {
+                    const text = msg.innerText;
+                    const matches = text.match(/(?:^|[^0-9])(\d{6})(?:[^0-9]|$)/);
+                    if (matches) {
+                        const code = matches[1];
+                        if (text.toLowerCase().includes("amazon") || text.toLowerCase().includes("job")) {
+                            foundOtp = code;
+                            console.log("[Auto-Login] Found code in Thread Body:", foundOtp);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 3. Last Resort: Absolute Last match anywhere
             if (!foundOtp) {
                 const bodyText = document.body.innerText;
-                const contextualMatch = bodyText.match(/(?:verification|code|amazon|jobs).*?\b(\d{6})\b/is);
-                if (contextualMatch) {
-                    foundOtp = contextualMatch[1];
+                const allMatches = Array.from(bodyText.matchAll(/(?:^|[^0-9])(\d{6})(?:[^0-9]|$)/g));
+                if (allMatches.length > 0) {
+                    foundOtp = allMatches[allMatches.length - 1][1];
                 }
-            }
-
-            // Priority 3: Last resort - just find the last 6-digit sequence found
-            if (!foundOtp) {
-                const otpMatch = document.body.innerText.match(/\b\d{6}\b/g);
-                if (otpMatch) foundOtp = otpMatch[otpMatch.length - 1];
             }
             
             if (foundOtp) {
-                console.log("[Auto-Login] Extracting verified OTP:", foundOtp);
                 sendResponse({ otp: foundOtp });
             } else {
-                sendResponse({ error: "No Amazon verification code found in Gmail tab" });
+                // If we don't find a code, try to refresh for the next poll
+                const refreshBtn = document.querySelector('div[aria-label="Refresh"], div[data-tooltip="Refresh"]');
+                if (refreshBtn) refreshBtn.click();
+                sendResponse({ error: "No code found yet" });
             }
         }
         return true; 
@@ -164,14 +183,16 @@ async function runAutoLogin() {
         return;
     }
 
-    const emailField = document.getElementById("login");
-    const pinField = document.getElementById("pin");
-    const otpField = document.getElementById("input-test-id-confirmOtp");
+    // --- SELECTORS ---
+    const emailField = document.getElementById("login") || document.querySelector('input[name="email"]');
+    const pinField = document.getElementById("pin") || document.querySelector('input[name="password"]');
+    const otpField = document.getElementById("input-test-id-confirmOtp") || document.querySelector('[data-test-id="input-test-id-confirmOtp"]');
     const sendCodeBtnTrigger = document.querySelector('[data-test-id="button-submit"]');
     const continueBtn = document.querySelector('[data-test-id="button-continue"]');
 
     // Email Step
     if (emailField && !emailField.value && settings.gmailEmail) {
+        console.log("[Auto-Login] Step: Typing Email...");
         await humanType(emailField, settings.gmailEmail);
         if (continueBtn) await humanClick(continueBtn);
         isProcessing = false;
@@ -180,6 +201,7 @@ async function runAutoLogin() {
 
     // PIN Step
     if (pinField && !pinField.value && settings.personalPin) {
+        console.log("[Auto-Login] Step: Typing PIN...");
         await humanType(pinField, settings.personalPin);
         if (continueBtn) await humanClick(continueBtn);
         isProcessing = false;
@@ -195,39 +217,70 @@ async function runAutoLogin() {
 
     // OTP Fetch/Verify Step
     if (otpField && (settings.gasScriptUrl || settings.otpMethod === "tab")) {
+        console.log("[Auto-Login] Step: OTP Input Screen Detected.");
+        
+        // ERROR DETECTION: "Enter a valid verification code"
+        const errorText = document.body.innerText;
+        const isInvalidOtp = errorText.includes("Enter a valid verification code");
+        
+        if (isInvalidOtp) {
+            console.warn("[Auto-Login] Detected error: Enter a valid verification code. Restarting fetch...");
+            otpField.value = "";
+            otpField.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
         if (!otpField.value) {
             let otp = null;
             const method = settings.otpMethod || "api";
-            console.log(`[Auto-Login] Polling for OTP using ${method} method...`);
+            // Use a broader storage-based check for the last used OTP to survive cross-page refreshes better
+            const lastUsedOtp = sessionStorage.getItem("amazon_last_used_otp");
+            
+            console.log(`[Auto-Login] Fetching code via ${method}... (Previous: ${lastUsedOtp || 'None'})`);
             
             for (let i = 0; i < 20; i++) {
                 if (isCaptchaVisible()) { lockdownActive = true; isProcessing = false; return; }
                 
+                let fetchedOtp = null;
                 if (method === "tab") {
-                    otp = await fetchOTPFromTab();
+                    fetchedOtp = await fetchOTPFromTab();
                 } else {
-                    otp = await fetchOTPFromAPI(settings.gasScriptUrl);
+                    fetchedOtp = await fetchOTPFromAPI(settings.gasScriptUrl);
                 }
                 
-                if (otp) break;
-                await new Promise(r => setTimeout(r, 3000));
+                if (fetchedOtp && fetchedOtp !== lastUsedOtp) {
+                    otp = fetchedOtp;
+                    console.log("[Auto-Login] Valid NEW OTP received.");
+                    break;
+                }
+                
+                console.log(`[Auto-Login] Waiting for new code... (Attempt ${i+1}/20)`);
+                await new Promise(r => setTimeout(r, 4000));
             }
 
             if (otp) {
+                sessionStorage.setItem("amazon_last_used_otp", otp);
                 await directFill(otpField, otp);
+                
                 const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]') || 
-                                 document.querySelector('[data-test-id="button-continue"]');
-                if (verifyBtn) await humanClick(verifyBtn);
+                                 document.querySelector('[data-test-id="button-continue"]') ||
+                                 document.querySelector('button[type="submit"]');
+                                 
+                if (verifyBtn) {
+                    console.log("[Auto-Login] Clicking Verify...");
+                    await humanClick(verifyBtn);
+                }
             }
         } else {
             const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]') || 
-                                 document.querySelector('[data-test-id="button-continue"]');
+                                 document.querySelector('[data-test-id="button-continue"]') ||
+                                 document.querySelector('button[type="submit"]');
             if (verifyBtn) await humanClick(verifyBtn);
         }
     }
 
     // Final Stage
     if (continueBtn && !emailField && !pinField && !otpField && !sendCodeBtnTrigger) {
+        console.log("[Auto-Login] Step: Clicking Final Continue...");
         await humanClick(continueBtn);
     }
 
