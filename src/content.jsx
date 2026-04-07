@@ -1,8 +1,67 @@
-import { humanType, humanClick } from "./utils/humanEmulation.js";
+import { humanType, humanClick, directFill } from "./utils/humanEmulation.js";
 
 const LOGIN_URL = "https://auth.hiring.amazon.com/#/login";
 let isProcessing = false; // Guard to prevent multiple simultaneous loops
 let lockdownActive = false; // Emergency stop if captcha is detected
+
+/**
+ * ---------------------------------------------------------
+ * GMAIL TAB MODE: Code to run on mail.google.com
+ * ---------------------------------------------------------
+ */
+if (window.location.hostname === "mail.google.com") {
+    console.log("[Auto-Login] Gmail detected. Standing by for OTP requests...");
+    
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === "EXTRACT_GMAIL_OTP") {
+            console.log("[Auto-Login] Received OTP extraction request...");
+            
+            // Priority 1: Search only within the active message body (Gmail's message content class)
+            // This avoids fetching numbers from the sidebar, subject lines, or other emails.
+            const messageBodies = Array.from(document.querySelectorAll('div.ii.gt, div[role="main"]'));
+            let foundOtp = null;
+
+            for (const body of messageBodies) {
+                const text = body.innerText;
+                // Look specifically for 6 digits near 'verification' or 'Amazon Jobs'
+                const contextualMatch = text.match(/(?:verification|code|amazon|jobs).*?\b(\d{6})\b/is);
+                if (contextualMatch) {
+                    foundOtp = contextualMatch[1];
+                    break;
+                }
+            }
+
+            // Priority 2: Fallback to searching the entire body with contextual regex
+            if (!foundOtp) {
+                const bodyText = document.body.innerText;
+                const contextualMatch = bodyText.match(/(?:verification|code|amazon|jobs).*?\b(\d{6})\b/is);
+                if (contextualMatch) {
+                    foundOtp = contextualMatch[1];
+                }
+            }
+
+            // Priority 3: Last resort - just find the last 6-digit sequence found
+            if (!foundOtp) {
+                const otpMatch = document.body.innerText.match(/\b\d{6}\b/g);
+                if (otpMatch) foundOtp = otpMatch[otpMatch.length - 1];
+            }
+            
+            if (foundOtp) {
+                console.log("[Auto-Login] Extracting verified OTP:", foundOtp);
+                sendResponse({ otp: foundOtp });
+            } else {
+                sendResponse({ error: "No Amazon verification code found in Gmail tab" });
+            }
+        }
+        return true; 
+    });
+}
+
+/**
+ * ---------------------------------------------------------
+ * AMAZON MODE: Logic for auth.hiring.amazon.com
+ * ---------------------------------------------------------
+ */
 
 /**
  * Deep search for any kind of Captcha (including inside Shadow DOM)
@@ -41,7 +100,7 @@ function isCaptchaVisible() {
 /**
  * Fetches the latest OTP from the Google Apps Script bridge.
  */
-async function fetchOTP(gasUrl) {
+async function fetchOTPFromAPI(gasUrl) {
     if (!gasUrl) return null;
     try {
         const response = await fetch(`${gasUrl}${gasUrl.includes('?') ? '&' : '?'}t=${Date.now()}`);
@@ -50,6 +109,22 @@ async function fetchOTP(gasUrl) {
     } catch (err) {
         return null;
     }
+}
+
+/**
+ * Fetches the latest OTP by messaging the background to query a Gmail tab.
+ */
+async function fetchOTPFromTab() {
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: "QUERY_GMAIL_TAB" }, (response) => {
+            if (response && response.otp) {
+                resolve(response.otp);
+            } else {
+                console.log("[Auto-Login] Tab fetch failed:", response?.error || "Unknown error");
+                resolve(null);
+            }
+        });
+    });
 }
 
 // Automation logic
@@ -66,7 +141,7 @@ async function runAutoLogin() {
   isProcessing = true;
 
     try {
-    const settings = await chrome.storage.local.get(["isAutomationRunning", "gmailEmail", "personalPin", "gasScriptUrl"]);
+    const settings = await chrome.storage.local.get(["isAutomationRunning", "gmailEmail", "personalPin", "gasScriptUrl", "otpMethod"]);
     
     if (!settings.isAutomationRunning) {
         isProcessing = false;
@@ -74,7 +149,6 @@ async function runAutoLogin() {
     }
 
     // --- RE-LOGIN DETECTION ---
-    // If we are not on the login hash, but we see a Sign In button, click it to start the flow
     if (!window.location.href.includes("#/login")) {
         const signInBtn = Array.from(document.querySelectorAll('button, a')).find(el => {
             const txt = el.textContent.toLowerCase();
@@ -82,13 +156,10 @@ async function runAutoLogin() {
         });
         
         if (signInBtn) {
-            console.log("[Auto-Login] Detected session logout. Clicking Sign In to restart flow...");
             await humanClick(signInBtn);
             isProcessing = false;
             return;
         }
-        
-        // If we're not on the login page and no sign-in button, just exit
         isProcessing = false;
         return;
     }
@@ -123,17 +194,27 @@ async function runAutoLogin() {
     }
 
     // OTP Fetch/Verify Step
-    if (otpField && settings.gasScriptUrl) {
+    if (otpField && (settings.gasScriptUrl || settings.otpMethod === "tab")) {
         if (!otpField.value) {
             let otp = null;
+            const method = settings.otpMethod || "api";
+            console.log(`[Auto-Login] Polling for OTP using ${method} method...`);
+            
             for (let i = 0; i < 20; i++) {
                 if (isCaptchaVisible()) { lockdownActive = true; isProcessing = false; return; }
-                otp = await fetchOTP(settings.gasScriptUrl);
+                
+                if (method === "tab") {
+                    otp = await fetchOTPFromTab();
+                } else {
+                    otp = await fetchOTPFromAPI(settings.gasScriptUrl);
+                }
+                
                 if (otp) break;
                 await new Promise(r => setTimeout(r, 3000));
             }
+
             if (otp) {
-                await humanType(otpField, otp);
+                await directFill(otpField, otp);
                 const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]') || 
                                  document.querySelector('[data-test-id="button-continue"]');
                 if (verifyBtn) await humanClick(verifyBtn);
@@ -145,7 +226,7 @@ async function runAutoLogin() {
         }
     }
 
-    // Final Final Step
+    // Final Stage
     if (continueBtn && !emailField && !pinField && !otpField && !sendCodeBtnTrigger) {
         await humanClick(continueBtn);
     }
@@ -165,14 +246,15 @@ chrome.runtime.onMessage.addListener((request) => {
     }
 });
 
-// Initial start delay
-setTimeout(() => {
-    runAutoLogin();
-}, 2500);
-
-// Heartbeat to catch page changes or redirects
-setInterval(() => {
-    if (!lockdownActive && !isProcessing) {
+// Run logic only on the Amazon portal
+if (window.location.hostname === "auth.hiring.amazon.com") {
+    setTimeout(() => {
         runAutoLogin();
-    }
-}, 5000);
+    }, 2500);
+
+    setInterval(() => {
+        if (!lockdownActive && !isProcessing) {
+            runAutoLogin();
+        }
+    }, 5000);
+}

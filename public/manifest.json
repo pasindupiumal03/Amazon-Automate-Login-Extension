@@ -1,7 +1,7 @@
 {
   "name": "Amazon Login Automate",
-  "version": "1.0",
-  "description": "Automated re-login and OTP verification for Amazon Hiring portals. Streamlines your recruitment login workflow effortlessly.",
+  "version": "1.1",
+  "description": "Automated re-login and dual-method OTP verification for Amazon Hiring portals. Fetch OTPs via GAS API or directly from a Gmail tab.",
   "manifest_version": 3,
   "action": {
     "default_popup": "popup.html"
@@ -11,8 +11,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://auth.hiring.amazon.com/*"],
-      "js": ["content.js"]
+      "matches": [
+        "https://auth.hiring.amazon.com/*",
+        "https://mail.google.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
     }
   ],
   "icons": {
@@ -22,5 +26,14 @@
     "64": "./assets/icons/64.png",
     "128": "./assets/icons/128.png"
   },
-  "permissions": ["storage", "activeTab", "tabs"]
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://auth.hiring.amazon.com/*",
+    "https://mail.google.com/*"
+  ]
 }
