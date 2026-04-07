@@ -33,37 +33,47 @@ function Popup() {
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [gasUrl, setGasUrl] = useState("");
+  const [otpMethod, setOtpMethod] = useState("api"); // "api" or "tab"
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState({ type: "info", message: "Ready to start automation" });
 
   useEffect(() => {
-    getFromStorage(["gmailEmail", "personalPin", "gasScriptUrl", "isAutomationRunning"]).then((res) => {
+    getFromStorage(["gmailEmail", "personalPin", "gasScriptUrl", "isAutomationRunning", "otpMethod"]).then((res) => {
       if (res.gmailEmail) setEmail(res.gmailEmail);
       if (res.personalPin) setPin(res.personalPin);
       if (res.gasScriptUrl) setGasUrl(res.gasScriptUrl);
       if (res.isAutomationRunning) setIsRunning(res.isAutomationRunning);
+      if (res.otpMethod) setOtpMethod(res.otpMethod || "api");
     });
   }, []);
 
   const handleStart = async () => {
-    if (!email || !pin || !gasUrl) {
-      setStatus({ type: "error", message: "All fields are required" });
+    if (!email || !pin || (otpMethod === "api" && !gasUrl)) {
+      setStatus({ type: "error", message: "Complete all fields first" });
       return;
     }
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab.url.startsWith("https://auth.hiring.amazon.com/")) {
+    if (!tab || !tab.url || !tab.url.startsWith("https://auth.hiring.amazon.com/")) {
       setStatus({ type: "error", message: "Please navigate to Amazon Login first" });
       return;
     }
 
-    await saveToStorage({ gmailEmail: email, personalPin: pin, gasScriptUrl: gasUrl, isAutomationRunning: true });
+    await saveToStorage({ 
+        gmailEmail: email, 
+        personalPin: pin, 
+        gasScriptUrl: gasUrl, 
+        otpMethod: otpMethod,
+        isAutomationRunning: true 
+    });
+    
     try {
         await chrome.tabs.sendMessage(tab.id, { 
             action: "START_AUTOMATION",
             gmailEmail: email,
             personalPin: pin,
-            gasUrl: gasUrl
+            gasUrl: gasUrl,
+            otpMethod: otpMethod
         });
     } catch (e) {}
 
@@ -82,9 +92,8 @@ function Popup() {
         setStatus({ type: "error", message: `${label} cannot be empty` });
         return;
     }
-    const storageKey = key === 'email' ? 'gmailEmail' : (key === 'pin' ? 'personalPin' : 'gasScriptUrl');
+    const storageKey = key === 'email' ? 'gmailEmail' : (key === 'pin' ? 'personalPin' : (key === 'gas' ? 'gasScriptUrl' : 'otpMethod'));
     
-    // If it's the GAS URL, let's also try to fetch the email
     if (key === 'gas') {
         setStatus({ type: "info", message: "Saving URL... Fetching email" });
         try {
@@ -110,6 +119,12 @@ function Popup() {
     setTimeout(() => setStatus({ type: "info", message: isRunning ? "Automation active" : "Ready to start automation" }), 3000);
   };
 
+  const toggleMethod = (method) => {
+    if (isRunning) return;
+    setOtpMethod(method);
+    saveToStorage({ otpMethod: method });
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
       {/* Header */}
@@ -128,8 +143,27 @@ function Popup() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-grow p-6 space-y-5">
+      <div className="flex-grow p-6 space-y-4">
         
+        {/* OTP Collection Method Toggle */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">OTP Fetching Strategy</label>
+          <div className="flex bg-slate-100 p-1 rounded-2xl">
+            <button
+              onClick={() => toggleMethod("api")}
+              className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all ${otpMethod === "api" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+            >
+              API (GAS Bridge)
+            </button>
+            <button
+              onClick={() => toggleMethod("tab")}
+              className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-xl transition-all ${otpMethod === "tab" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+            >
+              Gmail (Opened Tab)
+            </button>
+          </div>
+        </div>
+
         {/* Email Field */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">Gmail Address</label>
@@ -141,7 +175,7 @@ function Popup() {
               onChange={(e) => setEmail(e.target.value)}
               disabled={isRunning}
               placeholder="example@gmail.com"
-              className="w-full pl-11 pr-14 py-3.5 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-medium shadow-sm text-slate-700 placeholder-slate-300"
+              className="w-full pl-11 pr-14 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-medium shadow-sm text-slate-700 placeholder-slate-300"
             />
             <button 
               onClick={() => saveField('email', email, 'Email')}
@@ -164,7 +198,7 @@ function Popup() {
               onChange={(e) => setPin(e.target.value)}
               disabled={isRunning}
               placeholder="••••••"
-              className="w-full pl-11 pr-14 py-3.5 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-bold shadow-sm tracking-[0.2em] text-slate-700"
+              className="w-full pl-11 pr-14 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-sm font-bold shadow-sm tracking-[0.2em] text-slate-700"
             />
             <button 
               onClick={() => saveField('pin', pin, 'PIN')}
@@ -176,34 +210,36 @@ function Popup() {
           </div>
         </div>
 
-        {/* GAS Fetcher URL */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">GAS URL</label>
-          <div className="relative flex items-center">
-            <div className="absolute left-4 z-10"><LinkIcon /></div>
-            <input
-              type="text"
-              value={gasUrl}
-              onChange={(e) => setGasUrl(e.target.value)}
-              disabled={isRunning}
-              placeholder="https://script.google.com/..."
-              className="w-full pl-11 pr-14 py-3.5 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-[11px] font-medium shadow-sm text-slate-600 truncate"
-            />
-            <button 
-              onClick={() => saveField('gas', gasUrl, 'API URL')}
-              disabled={isRunning}
-              className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
-            >
-              <SaveIcon />
-            </button>
+        {/* GAS Fetcher URL - Hidden if Tab method is selected */}
+        {otpMethod === "api" && (
+          <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-300">
+            <label className="text-[11px] font-bold text-slate-400 uppercase ml-1 tracking-tight">GAS URL</label>
+            <div className="relative flex items-center">
+              <div className="absolute left-4 z-10"><LinkIcon /></div>
+              <input
+                type="text"
+                value={gasUrl}
+                onChange={(e) => setGasUrl(e.target.value)}
+                disabled={isRunning}
+                placeholder="https://script.google.com/..."
+                className="w-full pl-11 pr-14 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all text-[11px] font-medium shadow-sm text-slate-600 truncate"
+              />
+              <button 
+                onClick={() => saveField('gas', gasUrl, 'API URL')}
+                disabled={isRunning}
+                className="absolute right-2 p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-xl transition-all border border-slate-100 active:scale-95 disabled:hidden"
+              >
+                <SaveIcon />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Status Message */}
         <div className={`p-4 rounded-2xl text-[11px] font-bold uppercase tracking-tight transition-all duration-500 border overflow-hidden whitespace-nowrap overflow-ellipsis ${
           status.type === "success" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
           status.type === "error" ? "bg-rose-50 text-rose-500 border-rose-100" :
-          "bg-blue-50 text-blue-500 border-blue-100"
+          "bg-blue-50 text-blue-500 border-blue-100 shadow-sm"
         }`}>
           {status.message}
         </div>

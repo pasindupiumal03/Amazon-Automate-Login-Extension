@@ -1,26 +1,60 @@
-// Background script for Chrome extension
-// This runs in the background and handles extension lifecycle events
+/**
+ * AUTOMATEPRO: BACKGROUND SERVICE WORKER
+ * Handles cross-tab communication for Gmail OTP extraction.
+ */
 
-// Install event
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === 'install') {
-    console.log('Extension installed');
-  } else if (details.reason === 'update') {
-    console.log('Extension updated');
-  }
+/**
+ * Session Lifecycle Handlers
+ * Ensures the automation is turned OFF when the profile is restarted.
+ */
+chrome.runtime.onInstalled.addListener(() => {
+    console.log("[Auto-Login] Extension installed/updated. Resetting session...");
+    chrome.storage.local.set({ isAutomationRunning: false });
 });
 
-// Message handling between content script and popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Handle messages from content script or popup
-  console.log('Message received:', message);
-  
-  // Example: respond to message
-  sendResponse({ success: true });
+chrome.runtime.onStartup.addListener(() => {
+    console.log("[Auto-Login] Profile started. Resetting automation state...");
+    chrome.storage.local.set({ isAutomationRunning: false });
 });
 
-// Browser action (extension icon) click handler
-chrome.action.onClicked.addListener((tab) => {
-  // This will only trigger if no popup is defined in manifest
-  console.log('Extension icon clicked');
+/**
+ * Message Handler
+ */
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "QUERY_GMAIL_TAB") {
+        console.log("[Auto-Login] Searching for an active Gmail tab...");
+        
+        // Find all Gmail tabs
+        chrome.tabs.query({ url: "*://mail.google.com/*" }, (tabs) => {
+            if (tabs.length === 0) {
+                console.log("[Auto-Login] No Gmail tabs found.");
+                sendResponse({ error: "Gmail tab not open" });
+                return;
+            }
+
+            // Direct the query to a tab
+            // We iterate through all open Gmail tabs until one provides a code
+            const queryNextTab = (index) => {
+                if (index >= tabs.length) {
+                    sendResponse({ error: "Code not found in any open Gmail tabs" });
+                    return;
+                }
+
+                const targetTab = tabs[index];
+                chrome.tabs.sendMessage(targetTab.id, { action: "EXTRACT_GMAIL_OTP" }, (res) => {
+                    // Check if we got a code. If not, try the next tab.
+                    if (res && res.otp) {
+                        console.log(`[Auto-Login] OTP found in Gmail tab: ${targetTab.id}`);
+                        sendResponse({ otp: res.otp });
+                    } else {
+                        queryNextTab(index + 1);
+                    }
+                });
+            };
+
+            queryNextTab(0);
+        });
+        
+        return true; // Keep message channel open for async response
+    }
 });
