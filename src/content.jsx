@@ -1,8 +1,9 @@
 import { humanType, humanClick, directFill } from "./utils/humanEmulation.js";
 
 const LOGIN_URL = "https://auth.hiring.amazon.com/#/login";
-let isProcessing = false; // Guard to prevent multiple simultaneous loops
-let lockdownActive = false; // Emergency stop if captcha is detected
+let isProcessing = false;
+let lockdownActive = false;
+let lastUsedOtp = sessionStorage.getItem("amazon_last_used_otp") || null;
 
 /**
  * ---------------------------------------------------------
@@ -19,10 +20,8 @@ if (window.location.hostname === "mail.google.com") {
             let foundOtp = null;
 
             // 1. Priority: Inbox List Rows (Top-Most)
-            // This works even if Conversation View is ON or OFF.
             const inboxRows = Array.from(document.querySelectorAll('tr[role="row"], div[role="row"]'));
             if (inboxRows.length > 0) {
-                // Focus ONLY on the first 2 rows (most recent)
                 for (let i = 0; i < Math.min(inboxRows.length, 3); i++) {
                     const rowText = inboxRows[i].innerText + " " + (inboxRows[i].getAttribute('aria-label') || "");
                     const matches = rowText.match(/(?:^|[^0-9])(\d{6})(?:[^0-9]|$)/);
@@ -66,7 +65,7 @@ if (window.location.hostname === "mail.google.com") {
             if (foundOtp) {
                 sendResponse({ otp: foundOtp });
             } else {
-                // If we don't find a code, try to refresh for the next poll
+                // Trigger Gmail inbox refresh so next poll sees latest emails
                 const refreshBtn = document.querySelector('div[aria-label="Refresh"], div[data-tooltip="Refresh"]');
                 if (refreshBtn) refreshBtn.click();
                 sendResponse({ error: "No code found yet" });
@@ -82,9 +81,6 @@ if (window.location.hostname === "mail.google.com") {
  * ---------------------------------------------------------
  */
 
-/**
- * Deep search for any kind of Captcha (including inside Shadow DOM)
- */
 function isCaptchaVisible() {
     const indicators = [
         'iframe[src*="recaptcha"]', 'iframe[src*="arkose"]', 
@@ -116,9 +112,6 @@ function isCaptchaVisible() {
     return false;
 }
 
-/**
- * Fetches the latest OTP from the Google Apps Script bridge.
- */
 async function fetchOTPFromAPI(gasUrl) {
     if (!gasUrl) return null;
     try {
@@ -130,9 +123,6 @@ async function fetchOTPFromAPI(gasUrl) {
     }
 }
 
-/**
- * Fetches the latest OTP by messaging the background to query a Gmail tab.
- */
 async function fetchOTPFromTab() {
     return new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: "QUERY_GMAIL_TAB" }, (response) => {
@@ -146,7 +136,51 @@ async function fetchOTPFromTab() {
     });
 }
 
-// Automation logic
+/**
+ * Triggers the Gmail tab to refresh its inbox (fire-and-forget).
+ */
+function triggerGmailRefresh() {
+    chrome.runtime.sendMessage({ action: "REFRESH_GMAIL_TAB" });
+}
+
+let sendCodeJustClicked = false;
+
+/**
+ * Fast OTP polling loop.
+ * - Polls every 800ms with no extra delays between attempts.
+ * - Triggers a Gmail refresh on every attempt (fire-and-forget, doesn't block).
+ * - Max ~40s total (50 attempts × 800ms).
+ */
+async function fetchNewOTPFast(method, gasUrl, previousOtp) {
+    const MAX_ATTEMPTS = 50;
+    const POLL_INTERVAL_MS = 800;
+
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        if (isCaptchaVisible()) return null;
+
+        let fetchedOtp = null;
+
+        if (method === "tab") {
+            // Fire refresh without awaiting — let Gmail update in the background
+            triggerGmailRefresh();
+            fetchedOtp = await fetchOTPFromTab();
+        } else {
+            fetchedOtp = await fetchOTPFromAPI(gasUrl);
+        }
+
+        if (fetchedOtp && fetchedOtp !== previousOtp) {
+            console.log(`[Auto-Login] New OTP received on attempt ${i + 1}:`, fetchedOtp);
+            return fetchedOtp;
+        }
+
+        console.log(`[Auto-Login] Polling... attempt ${i + 1}/${MAX_ATTEMPTS} (got: ${fetchedOtp || 'none'})`);
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+    }
+
+    console.warn("[Auto-Login] OTP polling timed out.");
+    return null;
+}
+
 async function runAutoLogin() {
   if (lockdownActive || isProcessing) return;
 
@@ -159,8 +193,8 @@ async function runAutoLogin() {
 
   isProcessing = true;
 
-    try {
-    const settings = await chrome.storage.local.get(["isAutomationRunning", "gmailEmail", "personalPin", "gasScriptUrl", "otpMethod"]);
+  try {
+    const settings = await chrome.storage.local.get(["isAutomationRunning", "gmailEmail", "personalPin", "gasScriptUrl", "otpMethod", "automationSpeed"]);
     
     if (!settings.isAutomationRunning) {
         isProcessing = false;
@@ -192,8 +226,12 @@ async function runAutoLogin() {
 
     // Email Step
     if (emailField && !emailField.value && settings.gmailEmail) {
-        console.log("[Auto-Login] Step: Typing Email...");
-        await humanType(emailField, settings.gmailEmail);
+        console.log(`[Auto-Login] Step: Entering Email (${settings.automationSpeed || 'slow'})...`);
+        if (settings.automationSpeed === "fast") {
+            await directFill(emailField, settings.gmailEmail);
+        } else {
+            await humanType(emailField, settings.gmailEmail);
+        }
         if (continueBtn) await humanClick(continueBtn);
         isProcessing = false;
         return;
@@ -201,8 +239,12 @@ async function runAutoLogin() {
 
     // PIN Step
     if (pinField && !pinField.value && settings.personalPin) {
-        console.log("[Auto-Login] Step: Typing PIN...");
-        await humanType(pinField, settings.personalPin);
+        console.log(`[Auto-Login] Step: Entering PIN (${settings.automationSpeed || 'slow'})...`);
+        if (settings.automationSpeed === "fast") {
+            await directFill(pinField, settings.personalPin);
+        } else {
+            await humanType(pinField, settings.personalPin);
+        }
         if (continueBtn) await humanClick(continueBtn);
         isProcessing = false;
         return;
@@ -211,6 +253,7 @@ async function runAutoLogin() {
     // OTP Send Step
     if (sendCodeBtnTrigger && sendCodeBtnTrigger.textContent.includes("Send verification code")) {
         await humanClick(sendCodeBtnTrigger);
+        sendCodeJustClicked = true;
         isProcessing = false;
         return;
     }
@@ -224,40 +267,29 @@ async function runAutoLogin() {
         const isInvalidOtp = errorText.includes("Enter a valid verification code");
         
         if (isInvalidOtp) {
-            console.warn("[Auto-Login] Detected error: Enter a valid verification code. Restarting fetch...");
+            console.warn("[Auto-Login] Invalid OTP detected. Clearing and re-fetching...");
             otpField.value = "";
             otpField.dispatchEvent(new Event('input', { bubbles: true }));
+            lastUsedOtp = null;
+            sessionStorage.removeItem("amazon_last_used_otp");
         }
 
         if (!otpField.value) {
-            let otp = null;
             const method = settings.otpMethod || "api";
-            // Use a broader storage-based check for the last used OTP to survive cross-page refreshes better
-            const lastUsedOtp = sessionStorage.getItem("amazon_last_used_otp");
-            
-            console.log(`[Auto-Login] Fetching code via ${method}... (Previous: ${lastUsedOtp || 'None'})`);
-            
-            for (let i = 0; i < 20; i++) {
-                if (isCaptchaVisible()) { lockdownActive = true; isProcessing = false; return; }
-                
-                let fetchedOtp = null;
-                if (method === "tab") {
-                    fetchedOtp = await fetchOTPFromTab();
-                } else {
-                    fetchedOtp = await fetchOTPFromAPI(settings.gasScriptUrl);
-                }
-                
-                if (fetchedOtp && fetchedOtp !== lastUsedOtp) {
-                    otp = fetchedOtp;
-                    console.log("[Auto-Login] Valid NEW OTP received.");
-                    break;
-                }
-                
-                console.log(`[Auto-Login] Waiting for new code... (Attempt ${i+1}/20)`);
-                await new Promise(r => setTimeout(r, 4000));
+
+            // Wait 3 seconds ONCE after clicking Send Code, then immediately begin fast polling
+            if (sendCodeJustClicked) {
+                console.log("[Auto-Login] Waiting 3s for Gmail to receive the OTP email...");
+                await new Promise(r => setTimeout(r, 3000));
+                sendCodeJustClicked = false;
             }
 
+            console.log(`[Auto-Login] Starting fast OTP poll via [${method}]... (previous: ${lastUsedOtp || 'none'})`);
+
+            const otp = await fetchNewOTPFast(method, settings.gasScriptUrl, lastUsedOtp);
+
             if (otp) {
+                lastUsedOtp = otp;
                 sessionStorage.setItem("amazon_last_used_otp", otp);
                 await directFill(otpField, otp);
                 
@@ -272,8 +304,8 @@ async function runAutoLogin() {
             }
         } else {
             const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]') || 
-                                 document.querySelector('[data-test-id="button-continue"]') ||
-                                 document.querySelector('button[type="submit"]');
+                             document.querySelector('[data-test-id="button-continue"]') ||
+                             document.querySelector('button[type="submit"]');
             if (verifyBtn) await humanClick(verifyBtn);
         }
     }
@@ -285,9 +317,9 @@ async function runAutoLogin() {
     }
 
   isProcessing = false; 
-} catch (error) {
-  isProcessing = false;
-}
+  } catch (error) {
+    isProcessing = false;
+  }
 }
 
 // ---------------------------------------------------------
