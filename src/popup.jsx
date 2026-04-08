@@ -34,16 +34,18 @@ function Popup() {
   const [pin, setPin] = useState("");
   const [gasUrl, setGasUrl] = useState("");
   const [otpMethod, setOtpMethod] = useState("api"); // "api" or "tab"
+  const [automationSpeed, setAutomationSpeed] = useState("slow"); // "fast" or "slow"
   const [isRunning, setIsRunning] = useState(false);
   const [status, setStatus] = useState({ type: "info", message: "Ready to start automation" });
 
   useEffect(() => {
-    getFromStorage(["gmailEmail", "personalPin", "gasScriptUrl", "isAutomationRunning", "otpMethod"]).then((res) => {
+    getFromStorage(["gmailEmail", "personalPin", "gasScriptUrl", "isAutomationRunning", "otpMethod", "automationSpeed"]).then((res) => {
       if (res.gmailEmail) setEmail(res.gmailEmail);
       if (res.personalPin) setPin(res.personalPin);
       if (res.gasScriptUrl) setGasUrl(res.gasScriptUrl);
       if (res.isAutomationRunning) setIsRunning(res.isAutomationRunning);
       if (res.otpMethod) setOtpMethod(res.otpMethod || "api");
+      if (res.automationSpeed) setAutomationSpeed(res.automationSpeed || "slow");
     });
   }, []);
 
@@ -64,6 +66,7 @@ function Popup() {
         personalPin: pin, 
         gasScriptUrl: gasUrl, 
         otpMethod: otpMethod,
+        automationSpeed: automationSpeed,
         isAutomationRunning: true 
     });
     
@@ -73,7 +76,8 @@ function Popup() {
             gmailEmail: email,
             personalPin: pin,
             gasUrl: gasUrl,
-            otpMethod: otpMethod
+            otpMethod: otpMethod,
+            automationSpeed: automationSpeed
         });
     } catch (e) {}
 
@@ -112,6 +116,9 @@ function Popup() {
             await saveToStorage({ [storageKey]: val });
             setStatus({ type: "success", message: "Config saved (Manual email entry needed)" });
         }
+    } else if (key === 'speed') {
+        await saveToStorage({ automationSpeed: val });
+        setStatus({ type: "success", message: "Speed preference saved" });
     } else {
         await saveToStorage({ [storageKey]: val });
         setStatus({ type: "success", message: `${label} saved` });
@@ -151,15 +158,34 @@ function Popup() {
           <div className="flex bg-slate-200 p-1 rounded-2xl">
             <button
               onClick={() => toggleMethod("api")}
-              className={`flex-1 py-2 text-[10px] font-extrabold uppercase rounded-xl transition-all ${otpMethod === "api" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
+              className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase rounded-xl transition-all ${otpMethod === "api" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
             >
               API (GAS Bridge)
             </button>
             <button
               onClick={() => toggleMethod("tab")}
-              className={`flex-1 py-2 text-[10px] font-extrabold uppercase rounded-xl transition-all ${otpMethod === "tab" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
+              className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase rounded-xl transition-all ${otpMethod === "tab" ? "bg-indigo-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
             >
               Gmail (Opened Tab)
+            </button>
+          </div>
+        </div>
+
+        {/* Automation Speed Toggle */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold text-slate-600 uppercase ml-1 tracking-tight">Automation Speed</label>
+          <div className="flex bg-slate-200 p-1 rounded-2xl">
+            <button
+              onClick={() => { setAutomationSpeed("fast"); saveField('speed', 'fast'); }}
+              className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase rounded-xl transition-all ${automationSpeed === "fast" ? "bg-emerald-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              Fast (Full Fill)
+            </button>
+            <button
+              onClick={() => { setAutomationSpeed("slow"); saveField('speed', 'slow'); }}
+              className={`flex-1 py-1.5 text-[10px] font-extrabold uppercase rounded-xl transition-all ${automationSpeed === "slow" ? "bg-amber-600 text-white shadow-lg" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              Slow (Human)
             </button>
           </div>
         </div>
