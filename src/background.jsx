@@ -89,6 +89,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return false;
     }
 
+    if (request.action === "QUERY_GMAIL_TAB_WITH_SWITCH") {
+        console.log("[Auto-Login] Starting sequential tab-switch fetch (Instant Switch)...");
+        const amazonTabId = sender.tab.id;
+
+        // 1. Find and Activate Gmail (INSTANTLY)
+        chrome.tabs.query({ url: "*://mail.google.com/*" }, (tabs) => {
+            if (tabs.length === 0) {
+                sendResponse({ error: "Gmail tab not open" });
+                return;
+            }
+            const gmailTab = tabs[0];
+            chrome.tabs.update(gmailTab.id, { active: true }, () => {
+               
+                // 2. Wait 1 second in Gmail for sync
+                setTimeout(() => {
+                    chrome.tabs.sendMessage(gmailTab.id, { action: "EXTRACT_GMAIL_OTP" }, (res) => {
+                        if (res && res.otp) {
+                            console.log("[Auto-Login] OTP Extracted. Switching back...");
+                            // 3. Switch back to Amazon
+                            chrome.tabs.update(amazonTabId, { active: true }, () => {
+                                sendResponse({ otp: res.otp });
+                            });
+                        } else {
+                            // Switch back anyway even if failed
+                            chrome.tabs.update(amazonTabId, { active: true }, () => {
+                                sendResponse({ error: "No code found after switch" });
+                            });
+                        }
+                    });
+                }, 1000);
+            });
+        });
+
+        return true;
+    }
+
     if (request.action === "QUERY_GMAIL_TAB") {
         console.log("[Auto-Login] Searching for an active Gmail tab...");
         

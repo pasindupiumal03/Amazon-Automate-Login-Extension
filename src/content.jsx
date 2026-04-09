@@ -123,24 +123,22 @@ async function fetchOTPFromAPI(gasUrl) {
     }
 }
 
-async function fetchOTPFromTab() {
+/**
+ * Fetches the latest OTP by messaging the background to query a Gmail tab.
+ * @param {boolean} useSwitch - If true, visually switches to Gmail tab then back.
+ */
+async function fetchOTPFromTab(useSwitch = false) {
     return new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: "QUERY_GMAIL_TAB" }, (response) => {
+        const action = useSwitch ? "QUERY_GMAIL_TAB_WITH_SWITCH" : "QUERY_GMAIL_TAB";
+        chrome.runtime.sendMessage({ action: action }, (response) => {
             if (response && response.otp) {
                 resolve(response.otp);
             } else {
-                console.log("[Auto-Login] Tab fetch failed:", response?.error || "Unknown error");
+                console.log(`[Auto-Login] Tab fetch (${action}) failed:`, response?.error || "Unknown error");
                 resolve(null);
             }
         });
     });
-}
-
-/**
- * Triggers the Gmail tab to refresh its inbox (fire-and-forget).
- */
-function triggerGmailRefresh() {
-    chrome.runtime.sendMessage({ action: "REFRESH_GMAIL_TAB" });
 }
 
 let sendCodeJustClicked = false;
@@ -161,9 +159,12 @@ async function fetchNewOTPFast(method, gasUrl, previousOtp) {
         let fetchedOtp = null;
 
         if (method === "tab") {
-            // Fire refresh without awaiting — let Gmail update in the background
-            triggerGmailRefresh();
-            fetchedOtp = await fetchOTPFromTab();
+            // Sequential tab switch only on FIRST attempt for visual confirmation
+            if (i === 0) {
+                fetchedOtp = await fetchOTPFromTab(true); // useSwitch = true
+            } else {
+                fetchedOtp = await fetchOTPFromTab(false);
+            }
         } else {
             fetchedOtp = await fetchOTPFromAPI(gasUrl);
         }
@@ -252,8 +253,43 @@ async function runAutoLogin() {
 
     // OTP Send Step
     if (sendCodeBtnTrigger && sendCodeBtnTrigger.textContent.includes("Send verification code")) {
+        console.log("[Auto-Login] Step: Clicking Send Code. Waiting for transition...");
         await humanClick(sendCodeBtnTrigger);
-        sendCodeJustClicked = true;
+        
+        // Wait for the OTP screen transition in a tight loop
+        let transitionFound = false;
+        for (let j = 0; j < 50; j++) { // Max 10s (50 * 200ms)
+            const checkOtpField = document.getElementById("input-test-id-confirmOtp") || document.querySelector('[data-test-id="input-test-id-confirmOtp"]');
+            if (checkOtpField) {
+                transitionFound = true;
+                console.log("[Auto-Login] OTP screen detected. Executing 3s sync wait...");
+                break;
+            }
+            await new Promise(r => setTimeout(r, 200));
+        }
+
+        if (transitionFound) {
+            // Wait 3s as requested
+            await new Promise(r => setTimeout(r, 3000));
+            // Trigger switch logic
+            const method = settings.otpMethod || "api";
+            if (method === "tab") {
+                console.log("[Auto-Login] Executing Visual Sync Switch...");
+                const otp = await fetchNewOTPFast(method, settings.gasScriptUrl, lastUsedOtp);
+                if (otp) {
+                    lastUsedOtp = otp;
+                    sessionStorage.setItem("amazon_last_used_otp", otp);
+                    const finalOtpField = document.getElementById("input-test-id-confirmOtp") || document.querySelector('[data-test-id="input-test-id-confirmOtp"]');
+                    if (finalOtpField) await directFill(finalOtpField, otp);
+                    
+                    const verifyBtn = document.querySelector('[data-test-id="button-test-id-verifyAccount"]') || 
+                                     document.querySelector('[data-test-id="button-continue"]');
+                    if (verifyBtn) await humanClick(verifyBtn);
+                }
+            }
+        }
+
+        sendCodeJustClicked = false;
         isProcessing = false;
         return;
     }
@@ -277,10 +313,9 @@ async function runAutoLogin() {
         if (!otpField.value) {
             const method = settings.otpMethod || "api";
 
-            // Wait 3 seconds ONCE after clicking Send Code, then immediately begin fast polling
+            // The 3s wait and switch are now handled in the 'Send Code' step 
+            // after the transition is detected.
             if (sendCodeJustClicked) {
-                console.log("[Auto-Login] Waiting 3s for Gmail to receive the OTP email...");
-                await new Promise(r => setTimeout(r, 3000));
                 sendCodeJustClicked = false;
             }
 
@@ -341,5 +376,5 @@ if (window.location.hostname === "auth.hiring.amazon.com") {
         if (!lockdownActive && !isProcessing) {
             runAutoLogin();
         }
-    }, 5000);
+    }, 1000); // Polling every 1 second for instant detection
 }
