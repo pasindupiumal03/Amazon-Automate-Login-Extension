@@ -90,35 +90,45 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === "QUERY_GMAIL_TAB_WITH_SWITCH") {
-        console.log("[Auto-Login] Starting sequential tab-switch fetch (Instant Switch)...");
+        console.log("[Auto-Login] Starting sequential tab-switch with FULL RELOAD...");
         const amazonTabId = sender.tab.id;
 
-        // 1. Find and Activate Gmail (INSTANTLY)
         chrome.tabs.query({ url: "*://mail.google.com/*" }, (tabs) => {
             if (tabs.length === 0) {
                 sendResponse({ error: "Gmail tab not open" });
                 return;
             }
             const gmailTab = tabs[0];
+
+            // 1. Activate and Reload Gmail
             chrome.tabs.update(gmailTab.id, { active: true }, () => {
-               
-                // 2. Wait 1 second in Gmail for sync
-                setTimeout(() => {
-                    chrome.tabs.sendMessage(gmailTab.id, { action: "EXTRACT_GMAIL_OTP" }, (res) => {
-                        if (res && res.otp) {
-                            console.log("[Auto-Login] OTP Extracted. Switching back...");
-                            // 3. Switch back to Amazon
-                            chrome.tabs.update(amazonTabId, { active: true }, () => {
-                                sendResponse({ otp: res.otp });
-                            });
-                        } else {
-                            // Switch back anyway even if failed
-                            chrome.tabs.update(amazonTabId, { active: true }, () => {
-                                sendResponse({ error: "No code found after switch" });
-                            });
+                chrome.tabs.reload(gmailTab.id, {}, () => {
+                    console.log("[Auto-Login] Gmail reload triggered. Waiting for load...");
+
+                    // 2. Wait for Tab to be Complete
+                    const loadListener = (tabId, changeInfo) => {
+                        if (tabId === gmailTab.id && changeInfo.status === "complete") {
+                            chrome.tabs.onUpdated.removeListener(loadListener);
+                            
+                            console.log("[Auto-Login] Gmail loaded. Extracting ASAP...");
+                            // 3. Short 500ms wait for Gmail UI render (instead of 2s)
+                            setTimeout(() => {
+                                chrome.tabs.sendMessage(gmailTab.id, { action: "EXTRACT_GMAIL_OTP" }, (res) => {
+                                    console.log("[Auto-Login] Extraction complete. Switching back to Amazon...");
+                                    
+                                    // 4. Switch back to Amazon
+                                    chrome.tabs.update(amazonTabId, { active: true }, () => {
+                                        // 5. Final 1s wait on Amazon screen
+                                        setTimeout(() => {
+                                            sendResponse(res || { error: "Extraction failed" });
+                                        }, 1000);
+                                    });
+                                });
+                            }, 500);
                         }
-                    });
-                }, 1000);
+                    };
+                    chrome.tabs.onUpdated.addListener(loadListener);
+                });
             });
         });
 

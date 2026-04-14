@@ -262,15 +262,16 @@ async function runAutoLogin() {
             const checkOtpField = document.getElementById("input-test-id-confirmOtp") || document.querySelector('[data-test-id="input-test-id-confirmOtp"]');
             if (checkOtpField) {
                 transitionFound = true;
-                console.log("[Auto-Login] OTP screen detected. Executing 3s sync wait...");
                 break;
             }
             await new Promise(r => setTimeout(r, 200));
         }
 
         if (transitionFound) {
-            // Wait 3s as requested
-            await new Promise(r => setTimeout(r, 3000));
+            // Wait 4s as requested
+            console.log("[Auto-Login] OTP screen detected. Executing 4s sync wait...");
+            await new Promise(r => setTimeout(r, 4000));
+            
             // Trigger switch logic
             const method = settings.otpMethod || "api";
             if (method === "tab") {
@@ -298,16 +299,49 @@ async function runAutoLogin() {
     if (otpField && (settings.gasScriptUrl || settings.otpMethod === "tab")) {
         console.log("[Auto-Login] Step: OTP Input Screen Detected.");
         
-        // ERROR DETECTION: "Enter a valid verification code"
-        const errorText = document.body.innerText;
-        const isInvalidOtp = errorText.includes("Enter a valid verification code");
+        // ERROR DETECTION: Look specifically in the footer element provided
+        const errorFooter = document.getElementById("input-test-id-confirmOtp-footer") || 
+                           document.querySelector('[data-test-id="input-test-id-confirmOtp"]')?.closest('.el67hw60')?.querySelector('.css-1ymaoeh');
+        
+        const errorText = errorFooter ? errorFooter.innerText : "";
+        const isInvalidOtp = errorText.includes("Enter a valid verification code") || 
+                           errorText.includes("exceeded the requests limit") ||
+                           errorText.includes("Try resending the verification code");
         
         if (isInvalidOtp) {
-            console.warn("[Auto-Login] Invalid OTP detected. Clearing and re-fetching...");
-            otpField.value = "";
-            otpField.dispatchEvent(new Event('input', { bubbles: true }));
+            console.warn("[Auto-Login] OTP Error Detected in Footer. Handling recovery...");
+            
+            // Track consecutive failures in this session
+            let failCount = parseInt(sessionStorage.getItem("amazon_fail_count") || "0");
+            failCount++;
+            sessionStorage.setItem("amazon_fail_count", failCount.toString());
+
+            // Check for Second Failure IMMEDIATELY
+            if (failCount >= 2) {
+                console.error("[Auto-Login] SECOND FAILURE detected. Performing hard refresh...");
+                sessionStorage.removeItem("amazon_fail_count");
+                sessionStorage.removeItem("amazon_last_used_otp");
+                window.location.reload();
+                return;
+            }
+
+            // First failure: Clear, wait 7s, and re-fetch
+            const otpInp = document.getElementById("input-test-id-confirmOtp") || document.querySelector('[data-test-id="input-test-id-confirmOtp"]');
+            if (otpInp) {
+                console.log("[Auto-Login] Clearing input for second attempt...");
+                otpInp.value = "";
+                otpInp.dispatchEvent(new Event('input', { bubbles: true }));
+                // Force a small delay to let Amazon UI clear the error component if it wants to
+                await new Promise(r => setTimeout(r, 500));
+            }
+            
             lastUsedOtp = null;
             sessionStorage.removeItem("amazon_last_used_otp");
+            
+            console.log("[Auto-Login] First error attempt. Waiting 7s before recovery fetch...");
+            await new Promise(r => setTimeout(r, 7000));
+            isProcessing = false;
+            return; 
         }
 
         if (!otpField.value) {
