@@ -3,69 +3,18 @@
  * Handles cross-tab communication for Gmail OTP extraction.
  */
 
-// ---------------------------------------------------------
-// GMAIL SESSION KEEPALIVE using chrome.alarms (MV3-safe)
-// setInterval is unreliable in MV3 service workers because
-// the worker goes idle and gets killed between events.
-// chrome.alarms persists across service worker sleep/wake cycles.
-// ---------------------------------------------------------
-const GMAIL_KEEPALIVE_ALARM = "gmail-session-keepalive";
-const GMAIL_REFRESH_MINUTES = 15; // Change back to 15 for production
-
-function reloadAllGmailTabs() {
-    chrome.tabs.query({ url: "*://mail.google.com/*" }, (tabs) => {
-        if (tabs.length === 0) {
-            console.log("[Auto-Login] Keepalive: No Gmail tabs open, skipping.");
-            return;
-        }
-        tabs.forEach((tab) => {
-            console.log(`[Auto-Login] Keepalive: Reloading Gmail tab ${tab.id} (${tab.url})...`);
-            chrome.tabs.reload(tab.id);
-        });
-    });
-}
-
 /**
  * Session Lifecycle Handlers
  * Ensures the automation is turned OFF when the profile is restarted.
- * Also (re)creates the keepalive alarm on install/startup.
  */
 chrome.runtime.onInstalled.addListener(() => {
     console.log("[Auto-Login] Extension installed/updated. Resetting session...");
     chrome.storage.local.set({ isAutomationRunning: false });
-
-    // Create the alarm (clears any existing one first to avoid duplicates)
-    chrome.alarms.clear(GMAIL_KEEPALIVE_ALARM, () => {
-        chrome.alarms.create(GMAIL_KEEPALIVE_ALARM, {
-            delayInMinutes: GMAIL_REFRESH_MINUTES,
-            periodInMinutes: GMAIL_REFRESH_MINUTES,
-        });
-        console.log(`[Auto-Login] Keepalive alarm set: every ${GMAIL_REFRESH_MINUTES} minute(s).`);
-    });
 });
 
 chrome.runtime.onStartup.addListener(() => {
     console.log("[Auto-Login] Profile started. Resetting automation state...");
     chrome.storage.local.set({ isAutomationRunning: false });
-
-    // Re-create the alarm on browser startup (alarms survive restarts but good to ensure)
-    chrome.alarms.clear(GMAIL_KEEPALIVE_ALARM, () => {
-        chrome.alarms.create(GMAIL_KEEPALIVE_ALARM, {
-            delayInMinutes: GMAIL_REFRESH_MINUTES,
-            periodInMinutes: GMAIL_REFRESH_MINUTES,
-        });
-        console.log(`[Auto-Login] Keepalive alarm re-set on startup: every ${GMAIL_REFRESH_MINUTES} minute(s).`);
-    });
-});
-
-/**
- * Alarm Handler — fires the Gmail tab reload on schedule.
- */
-chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === GMAIL_KEEPALIVE_ALARM) {
-        console.log("[Auto-Login] Keepalive alarm fired. Reloading Gmail tabs...");
-        reloadAllGmailTabs();
-    }
 });
 
 /**

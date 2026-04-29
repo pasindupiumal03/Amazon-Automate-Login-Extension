@@ -316,12 +316,17 @@ async function runAutoLogin() {
             failCount++;
             sessionStorage.setItem("amazon_fail_count", failCount.toString());
 
-            // Check for Second Failure IMMEDIATELY
+            // Check for Second Failure IMMEDIATELY - STOP Extension
             if (failCount >= 2) {
-                console.error("[Auto-Login] SECOND FAILURE detected. Performing hard refresh...");
+                console.error("[Auto-Login] SECOND FAILURE detected. Stopping automation as requested...");
                 sessionStorage.removeItem("amazon_fail_count");
                 sessionStorage.removeItem("amazon_last_used_otp");
-                window.location.reload();
+                
+                chrome.storage.local.set({ isAutomationRunning: false }, () => {
+                   console.log("[Auto-Login] Automation globally disabled.");
+                });
+                
+                isProcessing = false;
                 return;
             }
 
